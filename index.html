@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Planner</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 24px 16px; }
+  h1 { text-align: center; font-size: 1.6rem; color: #a78bfa; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: #475569; font-size: 0.82rem; margin-bottom: 20px; }
+  .notif-bar { display: flex; justify-content: center; margin-bottom: 16px; }
+  .notif-btn { background: #7c3aed; color: white; border: none; padding: 10px 22px; border-radius: 10px; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: background 0.2s; }
+  .notif-btn:hover { background: #6d28d9; }
+  .notif-btn.ok { background: #15803d; cursor: default; }
+  .wrapper { max-width: 520px; margin: 0 auto; }
+  .sound-box { background: #1e293b; border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; }
+  .sound-box h2 { font-size: 0.82rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .sound-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sound-btn { display: flex; align-items: center; gap: 6px; background: #0f172a; border: 2px solid #334155; color: #94a3b8; border-radius: 10px; padding: 7px 12px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.15s; }
+  .sound-btn:hover { border-color: #7c3aed; color: #e2e8f0; }
+  .sound-btn.active { border-color: #7c3aed; background: #3b0764; color: #e2e8f0; }
+  .sound-btn .preview { background: none; border: none; color: #a78bfa; cursor: pointer; font-size: 0.9rem; padding: 0; line-height: 1; }
+  .sound-btn .preview:hover { color: #f59e0b; }
+  .clock-bar { text-align: center; margin-bottom: 18px; }
+  .clock { font-size: 2.4rem; font-weight: 800; color: #7c3aed; letter-spacing: 2px; }
+  .clock-date { font-size: 0.8rem; color: #475569; margin-top: 2px; }
+  .cal-strip { background: #1e293b; border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cal-nav button { background: #334155; border: none; color: #e2e8f0; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+  .cal-nav button:hover { background: #7c3aed; }
+  .cal-month { font-weight: 700; font-size: 1rem; color: #a78bfa; }
+  .cal-days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .cal-days::-webkit-scrollbar { display: none; }
+  .cal-day { flex-shrink: 0; width: 48px; background: #0f172a; border-radius: 10px; text-align: center; padding: 8px 4px; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
+  .cal-day:hover { background: #334155; }
+  .cal-day.today { border-color: #7c3aed; }
+  .cal-day.selected { background: #7c3aed; border-color: #7c3aed; }
+  .cal-day .dn { font-size: 0.65rem; color: #64748b; text-transform: uppercase; }
+  .cal-day.selected .dn { color: #ddd6fe; }
+  .cal-day .dd { font-size: 1.1rem; font-weight: 700; }
+  .cal-day .dot { height: 5px; display: flex; justify-content: center; margin-top: 3px; }
+  .cal-day .dot span { width: 5px; height: 5px; background: #f59e0b; border-radius: 50%; }
+  .cal-day.selected .dot span { background: white; }
+  .add-box { background: #1e293b; border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .add-box h2 { font-size: 0.82rem; color: #64748b; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 0.78rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
+  .field input, .field textarea { width: 100%; background: #0f172a; border: 1.5px solid #334155; color: #e2e8f0; border-radius: 9px; padding: 9px 12px; font-size: 0.92rem; outline: none; font-family: inherit; transition: border-color 0.2s; }
+  .field input:focus, .field textarea:focus { border-color: #7c3aed; }
+  .field textarea { resize: vertical; min-height: 56px; }
+  .time-row { display: flex; gap: 8px; align-items: flex-end; }
+  .time-inputs { display: flex; gap: 6px; align-items: center; flex: 1; }
+  .time-inputs input[type=number] { width: 70px; text-align: center; font-size: 1.3rem; font-weight: 700; padding: 8px 6px; }
+  .time-sep { font-size: 1.5rem; font-weight: 700; color: #7c3aed; line-height: 1; padding-bottom: 4px; }
+  .add-btn { background: #7c3aed; color: white; border: none; padding: 10px 20px; border-radius: 9px; cursor: pointer; font-size: 0.95rem; font-weight: 700; transition: background 0.2s; white-space: nowrap; }
+  .add-btn:hover { background: #6d28d9; }
+  .tasks-box { background: #1e293b; border-radius: 14px; padding: 16px; }
+  .tasks-box h2 { font-size: 0.82rem; color: #64748b; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .task-list { display: flex; flex-direction: column; gap: 8px; }
+  .task-item { background: #0f172a; border-radius: 10px; padding: 11px 14px; display: flex; align-items: center; gap: 10px; border-left: 3px solid #7c3aed; }
+  .task-item.done { border-left-color: #15803d; opacity: 0.55; }
+  .task-item.done .t-name { text-decoration: line-through; color: #64748b; }
+  .t-time { font-size: 1.15rem; font-weight: 800; color: #a78bfa; min-width: 52px; text-align: center; line-height: 1; }
+  .task-item.done .t-time { color: #475569; }
+  .t-body { flex: 1; }
+  .t-name { font-size: 0.92rem; font-weight: 600; }
+  .t-note { font-size: 0.78rem; color: #64748b; margin-top: 2px; }
+  .t-done { width: 20px; height: 20px; accent-color: #7c3aed; cursor: pointer; flex-shrink: 0; }
+  .t-del { background: none; border: none; color: #475569; cursor: pointer; font-size: 1rem; flex-shrink: 0; transition: color 0.2s; }
+  .t-del:hover { color: #ef4444; }
+  .empty { text-align: center; color: #334155; padding: 24px 0; font-size: 0.88rem; }
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 999; align-items: center; justify-content: center; }
+  .overlay.show { display: flex; }
+  .alarm-card { background: #1e293b; border: 2px solid #7c3aed; border-radius: 20px; padding: 36px 28px; max-width: 340px; width: 90%; text-align: center; animation: glow 0.8s infinite alternate; }
+  @keyframes glow { from { box-shadow: 0 0 16px #7c3aed55; } to { box-shadow: 0 0 40px #7c3aedcc; } }
+  .alarm-icon { font-size: 3.5rem; margin-bottom: 10px; }
+  .alarm-time { font-size: 2rem; font-weight: 800; color: #a78bfa; margin-bottom: 6px; }
+  .alarm-name { font-size: 1.1rem; font-weight: 600; margin-bottom: 18px; }
+  .alarm-note { font-size: 0.85rem; color: #94a3b8; margin-bottom: 18px; margin-top: -10px; }
+  .alarm-dismiss { background: #7c3aed; color: white; border: none; padding: 12px 36px; border-radius: 10px; cursor: pointer; font-size: 1rem; font-weight: 700; }
+  .alarm-dismiss:hover { background: #6d28d9; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <h1>&#x23F0; Task Planner</h1>
+  <p class="subtitle">Set a time &rarr; get an alarm when it arrives</p>
+  <div class="notif-bar"><button class="notif-btn" id="notifBtn" onclick="enableNotifs()">&#x1F514; Enable Notifications</button></div>
+  <div class="sound-box"><h2>&#x1F50A; Alarm Sound</h2><div class="sound-list" id="soundList"></div></div>
+  <div class="clock-bar"><div class="clock" id="clock">00:00:00</div><div class="clock-date" id="clockDate"></div></div>
+  <div class="cal-strip">
+    <div class="cal-nav"><button onclick="shiftMonth(-1)">&#x2039;</button><span class="cal-month" id="calMonth"></span><button onclick="shiftMonth(1)">&#x203a;</button></div>
+    <div class="cal-days" id="calDays"></div>
+  </div>
+  <div class="add-box">
+    <h2>Add Task &mdash; <span id="addLabel" style="color:#a78bfa">Today</span></h2>
+    <div class="field"><label>TASK NAME</label><input type="text" id="taskName" placeholder="e.g. Call doctor, Meeting..." maxlength="80"></div>
+    <div class="field"><label>NOTE (optional)</label><textarea id="taskNote" placeholder="Extra details..."></textarea></div>
+    <div class="field"><label>ALARM TIME</label>
+      <div class="time-row"><div class="time-inputs"><input type="number" id="taskHour" min="0" max="23" placeholder="HH"><span class="time-sep">:</span><input type="number" id="taskMin" min="0" max="59" placeholder="MM"></div><button class="add-btn" onclick="addTask()">+ Add</button></div>
+    </div>
+  </div>
+  <div class="tasks-box"><h2>Tasks &mdash; <span id="listLabel" style="color:#a78bfa">Today</span></h2><div class="task-list" id="taskList"></div></div>
+</div>
+<div class="overlay" id="overlay"><div class="alarm-card"><div class="alarm-icon">&#x1F514;</div><div class="alarm-time" id="alarmTime"></div><div class="alarm-name" id="alarmName"></div><div class="alarm-note" id="alarmNote"></div><button class="alarm-dismiss" onclick="dismissAlarm()">Dismiss</button></div></div>
+<script>
+let tasks=JSON.parse(localStorage.getItem('tp_tasks2')||'{}'),selectedDate=todayKey(),viewYear,viewMonth,beepInterval=null,selectedSound=localStorage.getItem('tp_sound')||'classic';
+function save(){localStorage.setItem('tp_tasks2',JSON.stringify(tasks));}
+function todayKey(){const d=new Date();return fmtKey(d.getFullYear(),d.getMonth(),d.getDate());}
+function fmtKey(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');}
+function fmtDisplay(key){const[y,m,d]=key.split('-');const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return months[+m-1]+' '+(+d)+', '+y;}
+const SOUNDS=[{id:'classic',label:'Classic Beep',icon:'&#x1F4F3;'},{id:'phone',label:'Phone Ring',icon:'&#x1F4F1;'},{id:'chime',label:'Chime',icon:'&#x1F514;'},{id:'siren',label:'Siren',icon:'&#x1F6A8;'},{id:'digital',label:'Digital',icon:'&#x1F5A5;'},{id:'gentle',label:'Gentle',icon:'&#x1F3B5;'},{id:'alarm',label:'Alarm Clock',icon:'&#x23F0;'},{id:'pulse',label:'Pulse',icon:'&#x1F493;'}];
+function getCtx(){return new(window.AudioContext||window.webkitAudioContext)();}
+function playSound(id){try{const ctx=getCtx();if(id==='classic')playClassic(ctx);else if(id==='phone')playPhone(ctx);else if(id==='chime')playChime(ctx);else if(id==='siren')playSiren(ctx);else if(id==='digital')playDigital(ctx);else if(id==='gentle')playGentle(ctx);else if(id==='alarm')playAlarmClock(ctx);else if(id==='pulse')playPulse(ctx);}catch(e){}}
+function playClassic(ctx){[0,.35,.7].forEach(t=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=880;o.type='sine';g.gain.setValueAtTime(0,ctx.currentTime+t);g.gain.linearRampToValueAtTime(.5,ctx.currentTime+t+.05);g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+t+.35);o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+.35);});}
+function playPhone(ctx){[[0],[.5],[1.1]].forEach(([t])=>{[480,620].forEach(freq=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=freq;o.type='sine';g.gain.setValueAtTime(.3,ctx.currentTime+t);g.gain.setValueAtTime(0,ctx.currentTime+t+.4);o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+.45);});});}
+function playChime(ctx){[1047,880,784,698,659].forEach((freq,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=freq;o.type='sine';const t=ctx.currentTime+i*.22;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.45,t+.04);g.gain.exponentialRampToValueAtTime(.001,t+.6);o.start(t);o.stop(t+.65);});}
+function playSiren(ctx){[0,1,2].forEach(offset=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sawtooth';const t=ctx.currentTime+offset;o.frequency.setValueAtTime(400,t);o.frequency.linearRampToValueAtTime(900,t+.4);o.frequency.linearRampToValueAtTime(400,t+.8);g.gain.setValueAtTime(.3,t);g.gain.setValueAtTime(0,t+.85);o.start(t);o.stop(t+.9);});}
+function playDigital(ctx){for(let i=0;i<8;i++){const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='square';o.frequency.value=i%2===0?1200:900;const t=ctx.currentTime+i*.12;g.gain.setValueAtTime(.25,t);g.gain.setValueAtTime(0,t+.09);o.start(t);o.stop(t+.1);}}
+function playGentle(ctx){[523,659,784,1047].forEach((freq,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=freq;const t=ctx.currentTime+i*.3;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.25,t+.1);g.gain.exponentialRampToValueAtTime(.001,t+.8);o.start(t);o.stop(t+.85);});}
+function playAlarmClock(ctx){for(let i=0;i<16;i++){const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='square';o.frequency.value=i%2===0?750:850;const t=ctx.currentTime+i*.075;g.gain.setValueAtTime(.3,t);g.gain.setValueAtTime(0,t+.06);o.start(t);o.stop(t+.07);}}
+function playPulse(ctx){[0,.3,.6,1.1,1.4,1.7].forEach(t=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.setValueAtTime(160,ctx.currentTime+t);o.frequency.exponentialRampToValueAtTime(60,ctx.currentTime+t+.15);g.gain.setValueAtTime(.6,ctx.currentTime+t);g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+t+.2);o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+.22);});}
+function renderSoundPicker(){document.getElementById('soundList').innerHTML=SOUNDS.map(s=>'<button class="sound-btn '+(s.id===selectedSound?'active':'')+'" onclick="selectSound(''+s.id+'')">'+s.icon+' '+s.label+' <span class="preview" onclick="event.stopPropagation();previewSound(''+s.id+'')">&#x25B6;</span></button>').join('');}
+function selectSound(id){selectedSound=id;localStorage.setItem('tp_sound',id);renderSoundPicker();}
+function previewSound(id){playSound(id);}
+function updateClock(){const now=new Date();const h=String(now.getHours()).padStart(2,'0'),m=String(now.getMinutes()).padStart(2,'0'),s=String(now.getSeconds()).padStart(2,'0');document.getElementById('clock').textContent=h+':'+m+':'+s;const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],months=['January','February','March','April','May','June','July','August','September','October','November','December'];document.getElementById('clockDate').textContent=days[now.getDay()]+', '+months[now.getMonth()]+' '+now.getDate()+', '+now.getFullYear();}
+function initCal(){const now=new Date();viewYear=now.getFullYear();viewMonth=now.getMonth();renderCal();}
+function shiftMonth(dir){viewMonth+=dir;if(viewMonth<0){viewMonth=11;viewYear--;}if(viewMonth>11){viewMonth=0;viewYear++;}renderCal();}
+function renderCal(){const months=['January','February','March','April','May','June','July','August','September','October','November','December'];document.getElementById('calMonth').textContent=months[viewMonth]+' '+viewYear;const container=document.getElementById('calDays');container.innerHTML='';const daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],today=todayKey();for(let d=1;d<=daysInMonth;d++){const key=fmtKey(viewYear,viewMonth,d),dow=new Date(viewYear,viewMonth,d).getDay(),el=document.createElement('div');el.className='cal-day';if(key===today)el.classList.add('today');if(key===selectedDate)el.classList.add('selected');const hasTasks=tasks[key]&&tasks[key].length>0;el.innerHTML='<div class="dn">'+dayNames[dow]+'</div><div class="dd">'+d+'</div><div class="dot">'+(hasTasks?'<span></span>':'')+'</div>';el.onclick=()=>selectDay(key);container.appendChild(el);if(key===today&&key===selectedDate)setTimeout(()=>el.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}),100);}}
+function selectDay(key){selectedDate=key;const label=key===todayKey()?'Today':fmtDisplay(key);document.getElementById('addLabel').textContent=label;document.getElementById('listLabel').textContent=label;renderCal();renderTasks();}
+function addTask(){const name=document.getElementById('taskName').value.trim();if(!name){document.getElementById('taskName').style.borderColor='#ef4444';return;}const hRaw=document.getElementById('taskHour').value,mRaw=document.getElementById('taskMin').value;if(hRaw===''||mRaw===''){alert('Please enter hour and minute.');return;}const h=Math.max(0,Math.min(23,+hRaw)),m=Math.max(0,Math.min(59,+mRaw)),timeStr=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),note=document.getElementById('taskNote').value.trim();if(!tasks[selectedDate])tasks[selectedDate]=[];tasks[selectedDate].push({id:Date.now(),name,note,time:timeStr,done:false});save();document.getElementById('taskName').value='';document.getElementById('taskNote').value='';document.getElementById('taskHour').value='';document.getElementById('taskMin').value='';document.getElementById('taskName').style.borderColor='';renderCal();renderTasks();}
+function toggleDone(dateKey,id){const t=(tasks[dateKey]||[]).find(t=>t.id===id);if(t){t.done=!t.done;save();renderTasks();}}
+function deleteTask(dateKey,id){if(!tasks[dateKey])return;tasks[dateKey]=tasks[dateKey].filter(t=>t.id!==id);if(!tasks[dateKey].length)delete tasks[dateKey];save();renderCal();renderTasks();}
+function renderTasks(){const list=(tasks[selectedDate]||[]).slice().sort((a,b)=>a.time.localeCompare(b.time)),container=document.getElementById('taskList');if(!list.length){container.innerHTML='<div class="empty">No tasks for this day.<br>Add one above</div>';return;}container.innerHTML=list.map(t=>'<div class="task-item '+(t.done?'done':'')+'"><div class="t-time">'+t.time+'</div><div class="t-body"><div class="t-name">'+esc(t.name)+'</div>'+(t.note?'<div class="t-note">'+esc(t.note)+'</div>':'')+'</div><input type="checkbox" class="t-done" '+(t.done?'checked':'')+' onchange="toggleDone(''+selectedDate+'','+t.id+')"><button class="t-del" onclick="deleteTask(''+selectedDate+'','+t.id+')">&#x2715;</button></div>').join('');}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function checkAlarms(){const now=new Date(),key=todayKey(),timeNow=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');(tasks[key]||[]).forEach(t=>{if(!t.done&&t.time===timeNow&&!t._fired){t._fired=true;save();triggerAlarm(t);}});}
+function triggerAlarm(task){document.getElementById('alarmTime').textContent=task.time;document.getElementById('alarmName').textContent=task.name;document.getElementById('alarmNote').textContent=task.note||'';document.getElementById('overlay').classList.add('show');sendOSNotification('&#x23F0; '+task.time+' - '+task.name,task.note||'Your alarm is ringing!','alarm-'+task.id);startBeep();}
+function startBeep(){stopBeep();playSound(selectedSound);beepInterval=setInterval(()=>playSound(selectedSound),3000);}
+function stopBeep(){if(beepInterval){clearInterval(beepInterval);beepInterval=null;}}
+function dismissAlarm(){document.getElementById('overlay').classList.remove('show');stopBeep();}
+const SW_CODE='self.addEventListener("message",e=>{if(e.data&&e.data.type==="NOTIFY"){self.registration.showNotification(e.data.title,{body:e.data.body,requireInteraction:true,tag:e.data.tag||"task-alarm"});}});self.addEventListener("notificationclick",e=>{e.notification.close();});';
+let swReg=null;
+async function registerSW(){if(!('serviceWorker'in navigator))return;try{const blob=new Blob([SW_CODE],{type:'application/javascript'});swReg=await navigator.serviceWorker.register(URL.createObjectURL(blob),{scope:'/'});}catch(e){}}
+async function sendOSNotification(title,body,tag){if(swReg){await swReg.update();const reg=await navigator.serviceWorker.ready;reg.active.postMessage({type:'NOTIFY',title,body,tag});}else if(Notification.permission==='granted'){new Notification(title,{body,requireInteraction:true});}}
+function enableNotifs(){if(!('Notification'in window)){alert('Notifications not supported.');return;}Notification.requestPermission().then(perm=>{updateNotifBtn(perm);if(perm==='granted')registerSW();});}
+function updateNotifBtn(perm){const btn=document.getElementById('notifBtn');if(perm==='granted'){btn.textContent='Notifications Enabled';btn.classList.add('ok');btn.disabled=true;}else{btn.textContent='Enable Notifications';btn.classList.remove('ok');}}
+renderSoundPicker();initCal();renderTasks();updateNotifBtn(Notification.permission);if(Notification.permission==='granted')registerSW();
+setInterval(updateClock,1000);updateClock();setInterval(checkAlarms,10000);checkAlarms();
+document.getElementById('taskName').addEventListener('keydown',e=>{if(e.key==='Enter')addTask();});
+document.getElementById('taskHour').addEventListener('blur',function(){if(this.value!=='')this.value=Math.max(0,Math.min(23,+this.value));});
+document.getElementById('taskMin').addEventListener('blur',function(){if(this.value!=='')this.value=Math.max(0,Math.min(59,+this.value));});
+</script>
+</body>
+</html>
