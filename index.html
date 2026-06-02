@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Task Planner</title>
 <style>
-
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 24px 16px; }
 h1 { text-align: center; font-size: 1.6rem; color: #a78bfa; margin-bottom: 4px; }
@@ -15,6 +14,8 @@ h1 { text-align: center; font-size: 1.6rem; color: #a78bfa; margin-bottom: 4px; 
 .box-title { font-size: 0.8rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
 .notif-btn { display: block; margin: 0 auto 16px; background: #7c3aed; color: white; border: none; padding: 10px 22px; border-radius: 10px; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
 .notif-btn.ok { background: #15803d; cursor: default; }
+.audio-hint { text-align: center; font-size: 0.78rem; color: #f59e0b; margin-bottom: 12px; display: none; }
+.audio-hint.show { display: block; }
 .sound-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .sbtn { background: #0f172a; border: 2px solid #334155; color: #94a3b8; border-radius: 10px; padding: 7px 12px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
 .sbtn.active { border-color: #7c3aed; background: #3b0764; color: #e2e8f0; }
@@ -64,12 +65,12 @@ h1 { text-align: center; font-size: 1.6rem; color: #a78bfa; margin-bottom: 4px; 
 .empty { text-align: center; color: #334155; padding: 24px 0; font-size: 0.88rem; }
 .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 999; align-items: center; justify-content: center; }
 .overlay.show { display: flex; }
-.alarm-card { background: #1e293b; border: 2px solid #7c3aed; border-radius: 20px; padding: 36px 28px; max-width: 340px; width: 90%; text-align: center; }
+.alarm-card { background: #1e293b; border: 2px solid #7c3aed; border-radius: 20px; padding: 36px 28px; max-width: 340px; width: 90%; text-align: center; animation: glow 0.8s infinite alternate; }
+@keyframes glow { from { box-shadow: 0 0 16px #7c3aed55; } to { box-shadow: 0 0 40px #7c3aedcc; } }
 .alarm-time { font-size: 2rem; font-weight: 800; color: #a78bfa; margin-bottom: 8px; }
 .alarm-name { font-size: 1.1rem; font-weight: 600; margin-bottom: 20px; }
 .alarm-note { font-size: 0.85rem; color: #94a3b8; margin-top: -12px; margin-bottom: 20px; }
 .dismiss-btn { background: #7c3aed; color: white; border: none; padding: 12px 36px; border-radius: 10px; cursor: pointer; font-size: 1rem; font-weight: 700; }
-
 </style>
 </head>
 <body>
@@ -77,6 +78,7 @@ h1 { text-align: center; font-size: 1.6rem; color: #a78bfa; margin-bottom: 4px; 
   <h1>Task Planner</h1>
   <p class="sub">Set a time and get an alarm when it arrives</p>
   <button class="notif-btn" id="notifBtn" onclick="enableNotifs()">Enable Notifications</button>
+  <p class="audio-hint" id="audioHint">Click anywhere on the page to enable alarm sounds</p>
   <div class="box">
     <div class="box-title">Alarm Sound</div>
     <div class="sound-list" id="soundList"></div>
@@ -122,6 +124,8 @@ h1 { text-align: center; font-size: 1.6rem; color: #a78bfa; margin-bottom: 4px; 
 var tasks = JSON.parse(localStorage.getItem('tp4') || '{}');
 var selDate = todayKey();
 var viewY, viewM, bInt = null, selSound = localStorage.getItem('tp_snd') || 'classic';
+var audioCtx = null;
+var audioUnlocked = false;
 
 function save() { localStorage.setItem('tp4', JSON.stringify(tasks)); }
 function pad(n) { return String(n).padStart(2,'0'); }
@@ -130,19 +134,26 @@ function fmtKey(y,m,d) { return y+'-'+pad(m+1)+'-'+pad(d); }
 function fmtDisp(k) { var p=k.split('-'),mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return mn[+p[1]-1]+' '+(+p[2])+', '+p[0]; }
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-/* SOUNDS */
-var SOUNDS = [
-  {id:'classic',label:'Classic Beep'},
-  {id:'phone',  label:'Phone Ring'},
-  {id:'chime',  label:'Chime'},
-  {id:'siren',  label:'Siren'},
-  {id:'digital',label:'Digital'},
-  {id:'gentle', label:'Gentle'},
-  {id:'alarm',  label:'Alarm Clock'},
-  {id:'pulse',  label:'Pulse'}
-];
+/* UNLOCK AUDIO on first user click */
+function unlockAudio() {
+  if(audioUnlocked) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var buf = audioCtx.createBuffer(1,1,22050);
+    var src = audioCtx.createBufferSource();
+    src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
+    audioUnlocked = true;
+    document.getElementById('audioHint').classList.remove('show');
+  } catch(e) {}
+}
+document.addEventListener('click', unlockAudio);
+document.addEventListener('touchstart', unlockAudio);
 
-function ctx() { return new (window.AudioContext||window.webkitAudioContext)(); }
+function getCtx() {
+  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
 
 function tone(ac,freq,type,start,dur,vol) {
   var o=ac.createOscillator(), g=ac.createGain();
@@ -154,9 +165,20 @@ function tone(ac,freq,type,start,dur,vol) {
   o.start(ac.currentTime+start); o.stop(ac.currentTime+start+dur+0.01);
 }
 
+var SOUNDS = [
+  {id:'classic',label:'Classic Beep'},
+  {id:'phone',  label:'Phone Ring'},
+  {id:'chime',  label:'Chime'},
+  {id:'siren',  label:'Siren'},
+  {id:'digital',label:'Digital'},
+  {id:'gentle', label:'Gentle'},
+  {id:'alarm',  label:'Alarm Clock'},
+  {id:'pulse',  label:'Pulse'}
+];
+
 function playSound(id) {
   try {
-    var ac=ctx();
+    var ac = getCtx();
     if(id==='classic') { [0,0.35,0.7].forEach(function(t){tone(ac,880,'sine',t,0.3);}); }
     else if(id==='phone') { [0,0.5,1.1].forEach(function(t){tone(ac,480,'sine',t,0.38);tone(ac,620,'sine',t,0.38);}); }
     else if(id==='chime') { [1047,880,784,698,659].forEach(function(f,i){tone(ac,f,'sine',i*0.22,0.55,0.35);}); }
@@ -179,7 +201,7 @@ function playSound(id) {
         o.start(ac.currentTime+t); o.stop(ac.currentTime+t+0.22);
       });
     }
-  } catch(e) {}
+  } catch(e) { console.log('Audio error:',e); }
 }
 
 function renderSounds() {
@@ -192,13 +214,12 @@ function renderSounds() {
     var play=document.createElement('button');
     play.className='play-btn'; play.textContent='Play';
     play.dataset.id=s.id;
-    play.addEventListener('click',function(e){e.stopPropagation();playSound(this.dataset.id);});
-    btn.addEventListener('click',function(){selSound=this.dataset.id;localStorage.setItem('tp_snd',selSound);renderSounds();});
+    play.addEventListener('click',function(e){e.stopPropagation();unlockAudio();playSound(this.dataset.id);});
+    btn.addEventListener('click',function(){unlockAudio();selSound=this.dataset.id;localStorage.setItem('tp_snd',selSound);renderSounds();});
     btn.appendChild(play); el.appendChild(btn);
   });
 }
 
-/* CLOCK */
 function updateClock() {
   var n=new Date();
   document.getElementById('clk').textContent=pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());
@@ -207,7 +228,6 @@ function updateClock() {
   document.getElementById('clkDate').textContent=days[n.getDay()]+', '+months[n.getMonth()]+' '+n.getDate()+', '+n.getFullYear();
 }
 
-/* CALENDAR */
 function initCal() { var n=new Date(); viewY=n.getFullYear(); viewM=n.getMonth(); renderCal(); }
 function shiftMonth(d) { viewM+=d; if(viewM<0){viewM=11;viewY--;} if(viewM>11){viewM=0;viewY++;} renderCal(); }
 
@@ -237,7 +257,6 @@ function selectDay(key) {
   renderCal(); renderTasks();
 }
 
-/* ADD TASK */
 function addTask() {
   var name=document.getElementById('tName').value.trim();
   if(!name){document.getElementById('tName').style.borderColor='#ef4444';return;}
@@ -270,46 +289,40 @@ function renderTasks() {
   var c=document.getElementById('taskList'); c.innerHTML='';
   if(!list.length){c.innerHTML='<div class="empty">No tasks for this day.<br>Add one above.</div>';return;}
   list.forEach(function(t) {
-    var div=document.createElement('div');
-    div.className='task-item'+(t.done?' done':'');
-
+    var div=document.createElement('div'); div.className='task-item'+(t.done?' done':'');
     var ttime=document.createElement('div'); ttime.className='t-time'; ttime.textContent=t.time;
     var tbody=document.createElement('div'); tbody.className='t-body';
     var tname=document.createElement('div'); tname.className='t-name'; tname.textContent=t.name;
     tbody.appendChild(tname);
-    if(t.note){var tnote=document.createElement('div');tnote.className='t-note';tnote.textContent=t.note;tbody.appendChild(tnote);}
-
+    if(t.note){var tn=document.createElement('div');tn.className='t-note';tn.textContent=t.note;tbody.appendChild(tn);}
     var chk=document.createElement('input'); chk.type='checkbox'; chk.className='t-done'; chk.checked=t.done;
     (function(tid){chk.addEventListener('change',function(){toggleDone(tid);});})(t.id);
-
     var del=document.createElement('button'); del.className='t-del'; del.textContent='X';
     (function(tid){del.addEventListener('click',function(){delTask(tid);});})(t.id);
-
     div.appendChild(ttime); div.appendChild(tbody); div.appendChild(chk); div.appendChild(del);
     c.appendChild(div);
   });
 }
 
-/* ALARMS */
 function checkAlarms() {
   var n=new Date(), key=todayKey(), tn=pad(n.getHours())+':'+pad(n.getMinutes());
   (tasks[key]||[]).forEach(function(t){
     if(!t.done&&t.time===tn&&!t._fired){t._fired=true;save();triggerAlarm(t);}
   });
 }
+
 function triggerAlarm(t) {
   document.getElementById('alarmTime').textContent=t.time;
   document.getElementById('alarmName').textContent=t.name;
   document.getElementById('alarmNote').textContent=t.note||'';
   document.getElementById('overlay').classList.add('show');
-  if(Notification.permission==='granted') new Notification('Alarm: '+t.time+' - '+t.name,{body:t.note||'Alarm is ringing!',requireInteraction:true});
+  if(Notification.permission==='granted') new Notification('Alarm: '+t.time+' - '+t.name,{body:t.note||'Alarm ringing!',requireInteraction:true});
   startBeep();
 }
 function startBeep(){stopBeep();playSound(selSound);bInt=setInterval(function(){playSound(selSound);},3000);}
 function stopBeep(){if(bInt){clearInterval(bInt);bInt=null;}}
 function dismissAlarm(){document.getElementById('overlay').classList.remove('show');stopBeep();}
 
-/* NOTIFICATIONS */
 function enableNotifs() {
   if(!('Notification' in window)){alert('Not supported.');return;}
   Notification.requestPermission().then(function(p){updateNotifBtn(p);});
@@ -320,13 +333,15 @@ function updateNotifBtn(p) {
   else{b.textContent='Enable Notifications';b.classList.remove('ok');}
 }
 
-/* INIT */
 renderSounds(); initCal(); renderTasks(); updateNotifBtn(Notification.permission);
 setInterval(updateClock,1000); updateClock();
 setInterval(checkAlarms,10000); checkAlarms();
 document.getElementById('tName').addEventListener('keydown',function(e){if(e.key==='Enter')addTask();});
 document.getElementById('tHour').addEventListener('blur',function(){if(this.value!=='')this.value=Math.max(0,Math.min(23,+this.value));});
 document.getElementById('tMin').addEventListener('blur',function(){if(this.value!=='')this.value=Math.max(0,Math.min(59,+this.value));});
+
+/* Show audio hint if not yet unlocked after 2s */
+setTimeout(function(){if(!audioUnlocked)document.getElementById('audioHint').classList.add('show');},2000);
 
 </script>
 </body>
