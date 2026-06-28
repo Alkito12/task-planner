@@ -89,10 +89,72 @@
     .btn { flex-shrink: 0; padding: 9px 10px; font-size: 0.68rem; }
     .fps { font-size: 0.58rem; padding: 4px 7px; }
   }
+
+  /* ---------- Başlangıç menüsü ---------- */
+  .start-menu {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background: radial-gradient(circle at 50% 35%, rgba(30,58,138,0.55), rgba(2,6,20,0.94) 70%);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    text-align: center; padding: 24px;
+  }
+  .start-menu.hidden { display: none; }
+  .start-menu h2 {
+    font-size: 1.5rem; font-weight: 800; color: #e0f2fe; letter-spacing: 0.3px;
+    background: linear-gradient(90deg,#7dd3fc,#a78bfa); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .start-menu .sub { font-size: 0.85rem; color: #93a9c8; max-width: 320px; margin-top: -10px; }
+  .device-choices { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+  .device-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    background: linear-gradient(180deg, rgba(30,64,175,0.5), rgba(15,23,42,0.7));
+    border: 1.5px solid rgba(125,211,252,0.3); border-radius: 18px;
+    padding: 22px 30px; cursor: pointer; color: #e0f2fe;
+    transition: transform .12s, filter .15s, border-color .15s;
+    min-width: 140px;
+  }
+  .device-btn:hover { filter: brightness(1.2); border-color: rgba(125,211,252,0.7); }
+  .device-btn:active { transform: scale(0.95); }
+  .device-btn .icon { font-size: 2.4rem; }
+  .device-btn .label { font-size: 0.95rem; font-weight: 700; }
+
+  /* ---------- Mobil dikkat uyarısı ---------- */
+  .mobile-warning {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.92);
+    z-index: 110; max-width: 86vw;
+    background: linear-gradient(180deg, rgba(146,64,14,0.92), rgba(67,20,7,0.95));
+    border: 1.5px solid rgba(251,191,36,0.5); border-radius: 18px;
+    padding: 20px 26px; color: #fef3c7; text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    opacity: 0; pointer-events: none; transition: opacity .35s, transform .35s;
+  }
+  .mobile-warning.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .mobile-warning .icon { font-size: 2rem; margin-bottom: 6px; }
+  .mobile-warning p { font-size: 0.95rem; font-weight: 700; line-height: 1.4; }
 </style>
 </head>
 <body>
 <canvas id="scene"></canvas>
+
+<div class="start-menu" id="startMenu">
+  <h2>⚓ Su Fiziği Simülasyonu</h2>
+  <p class="sub">Oynamak için cihazını seç:</p>
+  <div class="device-choices">
+    <div class="device-btn" id="choosePhone">
+      <span class="icon">📱</span>
+      <span class="label">Telefon</span>
+    </div>
+    <div class="device-btn" id="choosePC">
+      <span class="icon">💻</span>
+      <span class="label">Bilgisayar</span>
+    </div>
+  </div>
+</div>
+
+<div class="mobile-warning" id="mobileWarning">
+  <div class="icon">⚠️</div>
+  <p>Tüm özelliklerden yararlanmak için<br>yatay şekilde oynayın</p>
+</div>
 
 <div class="hud" id="hud">
   <h1>⚓ Su Fiziği · Gemi <button class="hud-toggle" id="hudToggle">▾</button></h1>
@@ -1112,6 +1174,19 @@
     hudEl.classList.add('collapsed');
     hudToggle.textContent = '▸';
   }
+
+  // ---------- Başlangıç menüsü ----------
+  const startMenu = document.getElementById('startMenu');
+  const mobileWarning = document.getElementById('mobileWarning');
+  function closeStartMenu() {
+    startMenu.classList.add('hidden');
+  }
+  document.getElementById('choosePhone').addEventListener('click', () => {
+    closeStartMenu();
+    mobileWarning.classList.add('show');
+    setTimeout(() => mobileWarning.classList.remove('show'), 3000);
+  });
+  document.getElementById('choosePC').addEventListener('click', closeStartMenu);
 
   // ---------- Başlat ----------
   let resizeTimer = null;
