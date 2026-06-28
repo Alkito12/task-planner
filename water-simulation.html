@@ -160,7 +160,8 @@
   <h1>⚓ Su Fiziği · Gemi <button class="hud-toggle" id="hudToggle">▾</button></h1>
   <p>Gemiye <span class="key">basılı tut</span> ve suda <span class="key">sürükle</span>.
   Bıraktığında su dalgalanır ve <span class="key">fışkırır</span>. Suya tıklayarak da dalga oluştur.
-  <br>🦑 <span class="key">Kraken</span> gemiyi kapıp dibe çeker ve parçalar — <span class="key">Sıfırla</span> ile onar.</p>
+  <br>🦑 <span class="key">Kraken</span> gemiyi kapıp dibe çeker ve parçalar. 🧪 <span class="key">Asit Yağmuru</span> gemiyi eritir —
+  her iki durumda da <span class="key">Sıfırla</span> ile onar.</p>
 </div>
 
 <div class="fps" id="fps">–</div>
@@ -183,6 +184,7 @@
   <button class="btn alt" id="rain">☔ Yağmur</button>
   <button class="btn alt" id="cannon">💣 Top Ateşle</button>
   <button class="btn alt" id="kraken">🦑 Kraken</button>
+  <button class="btn alt" id="acidRain">🧪 Asit Yağmuru</button>
   <button class="btn" id="reset">↺ Sıfırla</button>
 </div>
 
@@ -286,7 +288,7 @@
   // ---------- Parçacıklar (sıçrayan su damlaları + köpük) ----------
   const particles = [];
   const MAX_PARTICLES = 1400;
-  function spawnSplash(x, y, power, dir = 0) {
+  function spawnSplash(x, y, power, dir = 0, kind = 'water') {
     const splashMul = parseFloat(splashEl.value);
     const n = Math.min(60, Math.floor(power * 2.2 * splashMul));
     for (let k = 0; k < n; k++) {
@@ -300,7 +302,8 @@
         r: 0.8 + Math.random() * 2.6,
         life: 1,
         decay: 0.008 + Math.random() * 0.02,
-        foam: Math.random() < 0.35
+        foam: Math.random() < 0.35,
+        kind
       });
     }
   }
@@ -377,6 +380,54 @@
     ctx.lineWidth = 1.3;
     ctx.beginPath();
     for (const d of rainDrops) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 1.5, d.y - d.len); }
+    ctx.stroke();
+  }
+
+  // ---------- Asit Yağmuru (gemiyi eritir) ----------
+  let acidRaining = false;
+  const acidDrops = [];
+  const MELT_THRESHOLD = 1;
+  function hitsShip(x, y) {
+    if (ship.state !== 'float' && ship.state !== 'melting') return false;
+    const dx = x - ship.x, dy = y - ship.y;
+    const cos = Math.cos(-ship.angle), sin = Math.sin(-ship.angle);
+    const lx = dx * cos - dy * sin;
+    const ly = dx * sin + dy * cos;
+    return Math.abs(lx) < ship.w * 0.5 && ly > -ship.h * 1.1 && ly < ship.h * 0.2;
+  }
+  function updateAcidRain() {
+    if (acidRaining) {
+      const count = Math.floor(W / 110);
+      for (let i = 0; i < count; i++) {
+        acidDrops.push({ x: Math.random() * (W + 120) - 60, y: -10, vy: 10 + Math.random() * 7, len: 8 + Math.random() * 11 });
+      }
+    }
+    for (let k = acidDrops.length - 1; k >= 0; k--) {
+      const d = acidDrops[k];
+      d.y += d.vy;
+      if (hitsShip(d.x, d.y)) {
+        ship.acid = Math.min(MELT_THRESHOLD, ship.acid + 0.012);
+        spawnSplash(d.x, d.y, 1.4, 0, 'acid');
+        if (ship.state === 'float' && ship.acid >= MELT_THRESHOLD) startMelting();
+        acidDrops.splice(k, 1);
+        continue;
+      }
+      const sy = surfaceY(d.x, timeNow);
+      if (d.y >= sy) {
+        splashAt(d.x, 0.9, 1);
+        if (Math.random() < 0.3) spawnSplash(d.x, sy, 1.2, 0, 'acid');
+        acidDrops.splice(k, 1);
+      } else if (d.y > H) {
+        acidDrops.splice(k, 1);
+      }
+    }
+  }
+  function drawAcidRain() {
+    if (acidDrops.length === 0) return;
+    ctx.strokeStyle = 'rgba(140,255,90,0.55)';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    for (const d of acidDrops) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 1.5, d.y - d.len); }
     ctx.stroke();
   }
 
@@ -664,20 +715,70 @@
     angle: 0, vAngle: 0,
     held: false,
     prevX: 0, prevY: 0,
-    state: 'float'            // 'float' | 'grabbed' | 'wrecked'
+    state: 'float',           // 'float' | 'grabbed' | 'wrecked' | 'melting' | 'melted'
+    acid: 0, meltT: 0
   };
   function resetShip() {
     ship.x = W * 0.5; ship.y = baseLevel - 40;
     ship.vx = 0; ship.vy = 0; ship.angle = 0; ship.vAngle = 0;
     ship.held = false;
     ship.state = 'float';
+    ship.acid = 0; ship.meltT = 0;
     debris.length = 0;
     bubbles.length = 0;
+    goo.length = 0;
+    acidDrops.length = 0;
     kraken.active = false; kraken.phase = 'idle';
+  }
+  function startMelting() {
+    if (ship.state !== 'float') return;
+    ship.state = 'melting';
+    ship.meltT = 0;
+    spawnImpactFlash(ship.x, surfaceY(ship.x, timeNow), 1.1, 'acid');
+  }
+  function finishMelt() {
+    ship.state = 'melted';
+    const sy = surfaceY(ship.x, timeNow);
+    spawnSplash(ship.x, sy, 30, 0, 'acid');
+    goo.push({ x: ship.x, life: 1 });
+    for (let i = 0; i < 18; i++) spawnBubble(ship.x + (Math.random() - 0.5) * ship.w, ship.y + (Math.random() - 0.5) * ship.h);
+  }
+
+  // ---------- Asit gölcüğü (gemi eridikten sonra suda kalan iz) ----------
+  const goo = [];
+  function updateGoo(dt) {
+    for (let k = goo.length - 1; k >= 0; k--) {
+      goo[k].life -= 0.05 * dt;
+      if (goo[k].life <= 0) goo.splice(k, 1);
+    }
+  }
+  function drawGoo(t) {
+    for (const g of goo) {
+      const y = surfaceY(g.x, t);
+      const r = 60 + 40 * (1 - g.life);
+      const grad = ctx.createRadialGradient(g.x, y, 0, g.x, y, r);
+      grad.addColorStop(0, `rgba(120,255,80,${0.4 * g.life})`);
+      grad.addColorStop(0.6, `rgba(80,200,50,${0.22 * g.life})`);
+      grad.addColorStop(1, 'rgba(80,200,50,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(g.x, y, r, r * 0.42, 0, 0, 6.283);
+      ctx.fill();
+    }
   }
 
   function updateShip(dt) {
-    if (ship.state === 'wrecked' || ship.state === 'grabbed') return; // kraken yönetiyor
+    if (ship.state === 'wrecked' || ship.state === 'grabbed' || ship.state === 'melted') return;
+    if (ship.state === 'melting') {
+      ship.meltT += dt * 0.016 / 3;             // ~3 saniyede tamamen erir
+      ship.vy += 0.05;                          // yavaşça batar
+      ship.y += ship.vy;
+      ship.vy *= 0.9;
+      if (Math.random() < 0.5) spawnBubble(ship.x + (Math.random() - 0.5) * ship.w, ship.y + (Math.random() - 0.5) * ship.h);
+      if (Math.random() < 0.4) spawnSplash(ship.x + (Math.random() - 0.5) * ship.w * 0.7, surfaceY(ship.x, timeNow), 2, 0, 'acid');
+      if (ship.meltT >= 1) finishMelt();
+      return;
+    }
     if (ship.held) {
       // hedefe doğru yumuşak takip; hız = yer değiştirme (su itme gücü için)
       const tx = pointer.x, ty = pointer.y;
@@ -885,16 +986,17 @@
 
   // ---------- Çizim: Gemi ----------
   function drawShip() {
-    if (ship.state === 'wrecked') return;          // parçalandı, enkaz çizilir
+    if (ship.state === 'wrecked' || ship.state === 'melted') return;
     ctx.save();
     ctx.translate(ship.x, ship.y);
     ctx.rotate(ship.angle);
 
     const w = ship.w, h = ship.h;
+    const melt = ship.state === 'melting' ? ship.meltT : 0;
 
     // yansıma (suya) — geminin solgun aynası
     ctx.save();
-    ctx.globalAlpha = 0.16;
+    ctx.globalAlpha = 0.16 * (1 - melt * 0.5);
     ctx.scale(1, -1);
     ctx.translate(0, -h * 1.6);
     drawHull(w, h, true);
@@ -909,8 +1011,29 @@
     ctx.fill();
     ctx.restore();
 
-    drawHull(w, h, false);
-    drawMastAndSails(w, h);
+    if (melt > 0) {
+      // asitle erirken: aşağı doğru sıkışma + solma + yeşil aşındırma katmanı
+      ctx.save();
+      ctx.globalAlpha = 1 - melt * 0.5;
+      ctx.scale(1 + melt * 0.15, 1 - melt * 0.65);
+      ctx.translate(0, melt * h * 0.5);
+      drawHull(w, h, false);
+      if (melt < 0.6) drawMastAndSails(w, h);
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = `rgba(90,220,60,${0.25 + melt * 0.5})`;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.5, -h * 0.18);
+      ctx.lineTo(w * 0.5, -h * 0.18);
+      ctx.quadraticCurveTo(w * 0.62, h * 0.2, w * 0.36, h * 0.78);
+      ctx.quadraticCurveTo(0, h * 1.0, -w * 0.36, h * 0.78);
+      ctx.quadraticCurveTo(-w * 0.62, h * 0.2, -w * 0.5, -h * 0.18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    } else {
+      drawHull(w, h, false);
+      drawMastAndSails(w, h);
+    }
 
     ctx.restore();
   }
@@ -1049,7 +1172,9 @@
       }
 
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = p.foam ? '#ffffff' : 'rgba(195,235,255,0.95)';
+      ctx.fillStyle = p.kind === 'acid'
+        ? (p.foam ? '#d4ff8a' : 'rgba(140,255,90,0.92)')
+        : (p.foam ? '#ffffff' : 'rgba(195,235,255,0.95)');
       ctx.beginPath();
       ctx.arc(0, 0, rad, 0, 6.283);
       ctx.fill();
@@ -1057,7 +1182,7 @@
       // büyük damlalara parlak vurgu (speküler highlight)
       if (rad > 1.7) {
         ctx.globalAlpha = alpha * 0.85;
-        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.fillStyle = p.kind === 'acid' ? 'rgba(220,255,170,0.9)' : 'rgba(255,255,255,0.95)';
         ctx.beginPath();
         ctx.arc(-rad * 0.3, -rad * 0.3, rad * 0.32, 0, 6.283);
         ctx.fill();
@@ -1069,8 +1194,8 @@
 
   // ---------- Sıçrama parıltısı (impact flash) ----------
   const flashes = [];
-  function spawnImpactFlash(x, y, scale = 1) {
-    flashes.push({ x, y, life: 1, scale });
+  function spawnImpactFlash(x, y, scale = 1, color = null) {
+    flashes.push({ x, y, life: 1, scale, color });
   }
   function updateFlashes(dt) {
     for (let k = flashes.length - 1; k >= 0; k--) {
@@ -1083,9 +1208,15 @@
       const y = surfaceY(f.x, t);
       const r = (34 + 70 * (1 - f.life)) * f.scale;
       const g = ctx.createRadialGradient(f.x, y, 0, f.x, y, r);
-      g.addColorStop(0, `rgba(255,255,255,${0.6 * f.life})`);
-      g.addColorStop(0.45, `rgba(215,245,255,${0.3 * f.life})`);
-      g.addColorStop(1, 'rgba(215,245,255,0)');
+      if (f.color === 'acid') {
+        g.addColorStop(0, `rgba(200,255,140,${0.6 * f.life})`);
+        g.addColorStop(0.45, `rgba(120,230,80,${0.32 * f.life})`);
+        g.addColorStop(1, 'rgba(120,230,80,0)');
+      } else {
+        g.addColorStop(0, `rgba(255,255,255,${0.6 * f.life})`);
+        g.addColorStop(0.45, `rgba(215,245,255,${0.3 * f.life})`);
+        g.addColorStop(1, 'rgba(215,245,255,0)');
+      }
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.ellipse(f.x, y, r, r * 0.5, 0, 0, 6.283);
@@ -1174,6 +1305,11 @@
     raining = !raining;
     rainBtn.classList.toggle('on', raining);
   });
+  const acidRainBtn = document.getElementById('acidRain');
+  acidRainBtn.addEventListener('click', () => {
+    acidRaining = !acidRaining;
+    acidRainBtn.classList.toggle('on', acidRaining);
+  });
 
   // ---------- Ana döngü ----------
   let timeNow = 0, last = performance.now(), fpsAcc = 0, fpsCount = 0;
@@ -1193,13 +1329,16 @@
     updateDebris(dt);
     updateBubbles(dt);
     updateRain();
+    updateAcidRain();
     updateParticles();
     updateFlashes(dt);
     updateLightning(dt);
+    updateGoo(dt);
 
     // çiz
     const sun = drawSky(timeNow);
     drawWater(timeNow, sun);
+    drawGoo(timeNow);
     drawFlashes(timeNow);
     drawBubbles();
     drawKraken();
@@ -1208,6 +1347,7 @@
     drawBalls();
     drawParticles();
     drawRain();
+    drawAcidRain();
     drawLightning();
 
     // fps
