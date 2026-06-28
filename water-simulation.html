@@ -1035,17 +1035,62 @@
   // ---------- Parçacık çizimi ----------
   function drawParticles() {
     for (const p of particles) {
-      ctx.globalAlpha = Math.max(0, p.life) * 0.9;
-      if (p.foam) {
-        ctx.fillStyle = '#ffffff';
-      } else {
-        ctx.fillStyle = 'rgba(190,235,255,0.95)';
+      const lifeT = Math.max(0, p.life);
+      const alpha = lifeT * lifeT * 0.85 + 0.05;   // yumuşak kayboluş (ease-out)
+      const rad = p.r * (0.55 + lifeT * 0.5);
+      const speed = Math.hypot(p.vx, p.vy);
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (speed > 1.1) {
+        // hareket yönünde gerilme: damlaya akıcı, "kaliteli" bir his verir
+        ctx.rotate(Math.atan2(p.vy, p.vx));
+        ctx.scale(Math.min(2.3, 1 + speed * 0.09), 1);
       }
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.foam ? '#ffffff' : 'rgba(195,235,255,0.95)';
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * (0.5 + p.life * 0.5), 0, 6.283);
+      ctx.arc(0, 0, rad, 0, 6.283);
       ctx.fill();
+
+      // büyük damlalara parlak vurgu (speküler highlight)
+      if (rad > 1.7) {
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.beginPath();
+        ctx.arc(-rad * 0.3, -rad * 0.3, rad * 0.32, 0, 6.283);
+        ctx.fill();
+      }
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
+  }
+
+  // ---------- Sıçrama parıltısı (impact flash) ----------
+  const flashes = [];
+  function spawnImpactFlash(x, y, scale = 1) {
+    flashes.push({ x, y, life: 1, scale });
+  }
+  function updateFlashes(dt) {
+    for (let k = flashes.length - 1; k >= 0; k--) {
+      flashes[k].life -= 0.065 * dt;
+      if (flashes[k].life <= 0) flashes.splice(k, 1);
+    }
+  }
+  function drawFlashes(t) {
+    for (const f of flashes) {
+      const y = surfaceY(f.x, t);
+      const r = (34 + 70 * (1 - f.life)) * f.scale;
+      const g = ctx.createRadialGradient(f.x, y, 0, f.x, y, r);
+      g.addColorStop(0, `rgba(255,255,255,${0.6 * f.life})`);
+      g.addColorStop(0.45, `rgba(215,245,255,${0.3 * f.life})`);
+      g.addColorStop(1, 'rgba(215,245,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(f.x, y, r, r * 0.5, 0, 0, 6.283);
+      ctx.fill();
+    }
   }
 
   // ---------- Girdi (mouse + dokunmatik) ----------
@@ -1080,9 +1125,20 @@
   function onUp() {
     pointer.active = false;
     if (ship.held) {
-      // bırakınca momentum + sıçrama
-      ship.vx = ship.vx; ship.vy = Math.max(ship.vy, 2);
-      spawnSplash(ship.x, surfaceY(ship.x, timeNow), 14);
+      // bırakınca sürükleme hızına göre katmanlı, güçlü bir sıçrama
+      const speed = Math.hypot(ship.vx, ship.vy);
+      const power = 24 + Math.min(95, speed * 9.5);
+      const sy = surfaceY(ship.x, timeNow);
+
+      spawnSplash(ship.x, sy, power, 0);                                  // merkez fışkırma
+      spawnSplash(ship.x - ship.w * 0.34, sy - 3, power * 0.6, -1);        // sol kenar
+      spawnSplash(ship.x + ship.w * 0.34, sy - 3, power * 0.6, 1);         // sağ kenar
+      spawnSplash(ship.x, sy - 6, power * 0.35, 0);                        // ince üst sis
+
+      splashAt(ship.x, -Math.min(28, 6 + speed * 1.9), 6);                 // dev dalga tepesi
+      spawnImpactFlash(ship.x, sy, Math.min(1.9, 0.7 + speed * 0.08));     // parlak çarpma ışığı
+
+      ship.vy = Math.max(ship.vy, 2.5 + Math.min(7, speed * 0.45));
     }
     ship.held = false;
     pointer.down = false;
@@ -1138,11 +1194,13 @@
     updateBubbles(dt);
     updateRain();
     updateParticles();
+    updateFlashes(dt);
     updateLightning(dt);
 
     // çiz
     const sun = drawSky(timeNow);
     drawWater(timeNow, sun);
+    drawFlashes(timeNow);
     drawBubbles();
     drawKraken();
     drawShip();
