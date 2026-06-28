@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Su Fiziği Simülasyonu · Gemi</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #02030a; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #scene { display: block; width: 100vw; height: 100vh; cursor: grab; }
+  #scene.dragging { cursor: grabbing; }
+
+  .hud {
+    position: fixed; top: 16px; left: 16px; z-index: 10;
+    background: rgba(8, 14, 30, 0.55);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(120, 170, 255, 0.18);
+    border-radius: 14px; padding: 14px 16px; color: #dbeafe;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+    max-width: 240px;
+  }
+  .hud h1 { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.3px; margin-bottom: 4px;
+    background: linear-gradient(90deg,#7dd3fc,#a78bfa); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hud p { font-size: 0.72rem; color: #93a9c8; line-height: 1.45; }
+  .hud .key { color: #7dd3fc; font-weight: 600; }
+
+  .panel {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+    background: rgba(8, 14, 30, 0.55);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(120, 170, 255, 0.18);
+    border-radius: 16px; padding: 10px 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  }
+  .ctl { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 92px; }
+  .ctl label { font-size: 0.62rem; color: #93a9c8; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; }
+  .ctl input[type=range] { width: 92px; accent-color: #38bdf8; cursor: pointer; }
+  .btn {
+    background: linear-gradient(180deg,#1d4ed8,#1e3a8a); color: #e0f2fe; border: 1px solid rgba(125,211,252,0.3);
+    padding: 9px 14px; border-radius: 11px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    transition: transform .08s, filter .15s;
+  }
+  .btn:hover { filter: brightness(1.2); }
+  .btn:active { transform: scale(0.95); }
+  .fps { position: fixed; top: 16px; right: 16px; z-index: 10; font-size: 0.68rem; color: #64748b;
+    background: rgba(8,14,30,0.5); padding: 5px 9px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="hud">
+  <h1>⚓ Su Fiziği · Gemi</h1>
+  <p>Gemiye <span class="key">basılı tut</span> ve suda <span class="key">sürükle</span>.
+  Bıraktığında su dalgalanır ve <span class="key">fışkırır</span>. Suya tıklayarak da dalga oluştur.</p>
+</div>
+
+<div class="fps" id="fps">–</div>
+
+<div class="panel">
+  <div class="ctl">
+    <label>Dalga Boyu</label>
+    <input id="waveSize" type="range" min="0.2" max="2.5" step="0.05" value="1">
+  </div>
+  <div class="ctl">
+    <label>Rüzgâr</label>
+    <input id="wind" type="range" min="0" max="1.5" step="0.05" value="0.35">
+  </div>
+  <div class="ctl">
+    <label>Sıçrama</label>
+    <input id="splash" type="range" min="0.3" max="2.5" step="0.1" value="1.2">
+  </div>
+  <button class="btn" id="storm">🌊 Fırtına</button>
+  <button class="btn" id="reset">↺ Sıfırla</button>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById('scene');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  // ---------- Boyut / DPI yönetimi ----------
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    buildWater();
+    buildSkyGradient();
+  }
+
+  // ---------- Su yüzeyi: yay tabanlı yükseklik alanı ----------
+  // Klasik "spring water": her sütun bir yaya bağlı, komşulara yayılım yapılır.
+  const COL_W = 7;             // sütun genişliği (px)
+  let cols = 0;
+  let baseLevel = 0;           // sakin su seviyesi (y)
+  const SPRING_K = 0.022;      // yay sertliği
+  const DAMP = 0.026;          // sönümleme
+  const SPREAD = 0.20;         // komşuya yayılım
+
+  let height = [];   // dikey yer değiştirme
+  let vel = [];      // hız
+
+  function buildWater() {
+    cols = Math.ceil(W / COL_W) + 1;
+    baseLevel = H * 0.52;
+    height = new Array(cols).fill(0);
+    vel = new Array(cols).fill(0);
+  }
+
+  function splashAt(x, power, spread = 1) {
+    const i = Math.max(0, Math.min(cols - 1, Math.round(x / COL_W)));
+    const w = Math.max(1, Math.round(spread));
+    for (let d = -w; d <= w; d++) {
+      const idx = i + d;
+      if (idx < 0 || idx >= cols) continue;
+      const falloff = 1 - Math.abs(d) / (w + 1);
+      vel[idx] += power * falloff;
+    }
+  }
+
+  function updateWater() {
+    const sizeMul = parseFloat(waveSizeEl.value);
+    // Yay fiziği
+    for (let i = 0; i < cols; i++) {
+      const x = height[i];
+      const a = -SPRING_K * sizeMul * x - DAMP * vel[i];
+      vel[i] += a;
+      height[i] += vel[i];
+    }
+    // Komşulara yayılım (iki geçiş, kararlılık için)
+    const lDelta = new Array(cols).fill(0);
+    const rDelta = new Array(cols).fill(0);
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < cols; i++) {
+        if (i > 0) { lDelta[i] = SPREAD * (height[i] - height[i - 1]); vel[i - 1] += lDelta[i]; }
+        if (i < cols - 1) { rDelta[i] = SPREAD * (height[i] - height[i + 1]); vel[i + 1] += rDelta[i]; }
+      }
+      for (let i = 0; i < cols; i++) {
+        if (i > 0) height[i - 1] += lDelta[i] * 0.5;
+        if (i < cols - 1) height[i + 1] += rDelta[i] * 0.5;
+      }
+    }
+  }
+
+  // Su yüzeyi yüksekliğini herhangi bir x için (rüzgâr dalgaları dahil) verir
+  function surfaceY(x, t) {
+    const i = x / COL_W;
+    const i0 = Math.floor(i), i1 = Math.min(cols - 1, i0 + 1);
+    const f = i - i0;
+    const disp = (height[Math.max(0, i0)] || 0) * (1 - f) + (height[i1] || 0) * f;
+    // ek prosedürel rüzgâr dalgacıkları (detay için)
+    const wind = parseFloat(windEl.value);
+    const ripple =
+      Math.sin(x * 0.020 + t * 1.7) * 5.0 * wind +
+      Math.sin(x * 0.052 - t * 2.6) * 2.4 * wind +
+      Math.sin(x * 0.005 + t * 0.7) * 7.0 * wind;
+    return baseLevel + disp + ripple;
+  }
+
+  // ---------- Parçacıklar (sıçrayan su damlaları + köpük) ----------
+  const particles = [];
+  const MAX_PARTICLES = 1400;
+  function spawnSplash(x, y, power, dir = 0) {
+    const splashMul = parseFloat(splashEl.value);
+    const n = Math.min(60, Math.floor(power * 2.2 * splashMul));
+    for (let k = 0; k < n; k++) {
+      if (particles.length >= MAX_PARTICLES) break;
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.7 + dir * 0.5;
+      const spd = (1.5 + Math.random() * 5.5) * (0.6 + power * 0.05) * splashMul;
+      particles.push({
+        x, y,
+        vx: Math.cos(ang) * spd + dir * 2.2,
+        vy: Math.sin(ang) * spd - Math.random() * 2,
+        r: 0.8 + Math.random() * 2.6,
+        life: 1,
+        decay: 0.008 + Math.random() * 0.02,
+        foam: Math.random() < 0.35
+      });
+    }
+  }
+
+  function updateParticles() {
+    const G = 0.16;
+    for (let k = particles.length - 1; k >= 0; k--) {
+      const p = particles[k];
+      p.vy += G;
+      p.vx *= 0.992;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.decay;
+      // suya geri düşünce küçük dalga + yok ol
+      const sy = surfaceY(p.x, timeNow);
+      if (p.y >= sy && p.vy > 0) {
+        splashAt(p.x, Math.min(2.2, p.vy * 0.25));
+        p.life = 0;
+      }
+      if (p.life <= 0 || p.x < -20 || p.x > W + 20) particles.splice(k, 1);
+    }
+  }
+
+  // ---------- Gemi ----------
+  const ship = {
+    x: 0, y: 0,
+    w: 150, h: 56,
+    vx: 0, vy: 0,
+    angle: 0, vAngle: 0,
+    held: false,
+    prevX: 0, prevY: 0
+  };
+  function resetShip() {
+    ship.x = W * 0.5; ship.y = baseLevel - 40;
+    ship.vx = 0; ship.vy = 0; ship.angle = 0; ship.vAngle = 0;
+    ship.held = false;
+  }
+
+  function updateShip(dt) {
+    if (ship.held) {
+      // hedefe doğru yumuşak takip; hız = yer değiştirme (su itme gücü için)
+      const tx = pointer.x, ty = pointer.y;
+      const nx = ship.x + (tx - ship.x) * 0.35;
+      const ny = ship.y + (ty - ship.y) * 0.35;
+      ship.vx = nx - ship.x;
+      ship.vy = ny - ship.y;
+      ship.x = nx; ship.y = ny;
+      // su itmesi: geminin geçtiği yerde dalga + sıçrama
+      const drag = Math.abs(ship.vx) + Math.abs(ship.vy);
+      if (drag > 1.2) {
+        splashAt(ship.x, Math.max(-6, -ship.vy * 0.4) - drag * 0.25, 3);
+        if (drag > 5 && Math.random() < 0.6) {
+          const edgeX = ship.x + Math.sign(ship.vx) * ship.w * 0.35;
+          spawnSplash(edgeX, surfaceY(edgeX, timeNow) - 4, drag * 0.7, Math.sign(ship.vx));
+        }
+      }
+    } else {
+      // Kaldırma kuvveti fiziği
+      const sy = surfaceY(ship.x, timeNow);
+      const targetY = sy - ship.h * 0.18;      // denge derinliği
+      const submerge = ship.y - targetY;        // batma miktarı
+      const buoyancy = -submerge * 0.04;        // yukarı itme
+      ship.vy += buoyancy;
+      ship.vy += 0.22;                          // yerçekimi
+      ship.vy *= 0.86;                          // su sürtünmesi
+      ship.vx *= 0.92;
+      ship.y += ship.vy;
+      ship.x += ship.vx;
+
+      // sınırlar
+      if (ship.x < ship.w * 0.5) { ship.x = ship.w * 0.5; ship.vx *= -0.4; }
+      if (ship.x > W - ship.w * 0.5) { ship.x = W - ship.w * 0.5; ship.vx *= -0.4; }
+
+      // dalgalara göre eğilme (gövde sol-sağ yüksekliği)
+      const yl = surfaceY(ship.x - ship.w * 0.4, timeNow);
+      const yr = surfaceY(ship.x + ship.w * 0.4, timeNow);
+      const targetAngle = Math.atan2(yr - yl, ship.w * 0.8);
+      ship.vAngle += (targetAngle - ship.angle) * 0.06;
+      ship.vAngle *= 0.85;
+      ship.angle += ship.vAngle;
+
+      // güçlü çarpma ile sıçrama
+      if (ship.vy > 3.5) {
+        spawnSplash(ship.x - ship.w * 0.3, sy, ship.vy * 1.4, -1);
+        spawnSplash(ship.x + ship.w * 0.3, sy, ship.vy * 1.4, 1);
+        splashAt(ship.x, -ship.vy * 0.7, 3);
+      }
+    }
+
+    // gemi geçtiği yerde sürekli küçük yer değiştirme (su seviyesini bastır)
+    if (ship.held) {
+      const sy = surfaceY(ship.x, timeNow);
+      const push = (ship.y + ship.h * 0.25 - sy) * 0.06;
+      if (push > 0) splashAt(ship.x, push, 2);
+    }
+  }
+
+  function pointInShip(px, py) {
+    const dx = px - ship.x, dy = py - ship.y;
+    const cos = Math.cos(-ship.angle), sin = Math.sin(-ship.angle);
+    const lx = dx * cos - dy * sin;
+    const ly = dx * sin + dy * cos;
+    return Math.abs(lx) < ship.w * 0.62 && Math.abs(ly) < ship.h * 1.6;
+  }
+
+  // ---------- Çizim: Gökyüzü ----------
+  let skyGrad = null, sunGrad = null;
+  function buildSkyGradient() {
+    skyGrad = ctx.createLinearGradient(0, 0, 0, baseLevel + 40);
+    skyGrad.addColorStop(0.00, '#0a1635');
+    skyGrad.addColorStop(0.35, '#15315f');
+    skyGrad.addColorStop(0.70, '#3a6ea5');
+    skyGrad.addColorStop(0.92, '#e8a36a');
+    skyGrad.addColorStop(1.00, '#f4c98a');
+  }
+
+  // yıldızlar (sabit)
+  const stars = [];
+  function buildStars() {
+    stars.length = 0;
+    for (let i = 0; i < 120; i++) {
+      stars.push({ x: Math.random(), y: Math.random() * 0.4, r: Math.random() * 1.3 + 0.2, tw: Math.random() * 6.28 });
+    }
+  }
+
+  function drawSky(t) {
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, W, baseLevel + 60);
+
+    // yıldızlar
+    for (const s of stars) {
+      const alpha = (0.3 + 0.7 * Math.abs(Math.sin(s.tw + t * 1.5))) * (1 - s.y / 0.5);
+      ctx.globalAlpha = Math.max(0, alpha) * 0.8;
+      ctx.fillStyle = '#dbeafe';
+      ctx.beginPath();
+      ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // güneş / ay halesi
+    const sunX = W * 0.78, sunY = baseLevel * 0.42;
+    const halo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 220);
+    halo.addColorStop(0, 'rgba(255,236,190,0.95)');
+    halo.addColorStop(0.18, 'rgba(255,210,150,0.6)');
+    halo.addColorStop(0.5, 'rgba(255,180,120,0.18)');
+    halo.addColorStop(1, 'rgba(255,180,120,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(sunX - 240, sunY - 240, 480, 480);
+    ctx.fillStyle = '#fff4d8';
+    ctx.beginPath(); ctx.arc(sunX, sunY, 46, 0, 6.283); ctx.fill();
+
+    return { sunX, sunY };
+  }
+
+  // ---------- Çizim: Su ----------
+  function drawWater(t, sun) {
+    const step = 3; // örnekleme yoğunluğu (detay)
+    // su gövdesi gradyanı
+    const wg = ctx.createLinearGradient(0, baseLevel - 30, 0, H);
+    wg.addColorStop(0, 'rgba(120, 200, 230, 0.95)');
+    wg.addColorStop(0.08, '#2a8fc0');
+    wg.addColorStop(0.4, '#0d5a8f');
+    wg.addColorStop(1, '#04243f');
+
+    // yüzey yolu
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    let firstY = surfaceY(0, t);
+    ctx.lineTo(0, firstY);
+    const surfPts = [];
+    for (let x = 0; x <= W; x += step) {
+      const y = surfaceY(x, t);
+      surfPts.push(y);
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fillStyle = wg;
+    ctx.fill();
+
+    // güneş yansıması (sütun ışığı, dalgalara göre kırılan)
+    ctx.save();
+    ctx.clip();
+    const refGrad = ctx.createLinearGradient(0, baseLevel, 0, H);
+    refGrad.addColorStop(0, 'rgba(255,225,170,0.5)');
+    refGrad.addColorStop(0.5, 'rgba(255,200,140,0.12)');
+    refGrad.addColorStop(1, 'rgba(255,200,140,0)');
+    ctx.fillStyle = refGrad;
+    for (let y = baseLevel; y < H; y += 4) {
+      const wob = Math.sin(y * 0.15 + t * 3) * (8 + (y - baseLevel) * 0.08);
+      const width = 60 + (y - baseLevel) * 0.5;
+      ctx.globalAlpha = Math.max(0, 0.5 - (y - baseLevel) / (H - baseLevel) * 0.5);
+      ctx.fillRect(sun.sunX - width / 2 + wob, y, width, 3);
+    }
+    ctx.globalAlpha = 1;
+
+    // su altı ışık huzmeleri (caustics hissi)
+    ctx.globalCompositeOperation = 'screen';
+    for (let i = 0; i < 6; i++) {
+      const cx = (i / 6) * W + Math.sin(t * 0.5 + i) * 40;
+      const cg = ctx.createLinearGradient(cx, baseLevel, cx + 80, H);
+      cg.addColorStop(0, 'rgba(140,220,255,0.06)');
+      cg.addColorStop(1, 'rgba(140,220,255,0)');
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.moveTo(cx, baseLevel);
+      ctx.lineTo(cx + 50, baseLevel);
+      ctx.lineTo(cx + 200, H);
+      ctx.lineTo(cx - 100, H);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+
+    // yüzey parlaklık çizgisi + köpük (dalga tepelerinde)
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(220,245,255,0.55)';
+    ctx.beginPath();
+    for (let idx = 0; idx < surfPts.length; idx++) {
+      const x = idx * step;
+      const y = surfPts[idx];
+      if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // köpük noktaları: hızlı düşen sütunlarda
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let i = 1; i < cols - 1; i++) {
+      const slope = Math.abs(height[i + 1] - height[i - 1]);
+      const speed = Math.abs(vel[i]);
+      if (slope + speed > 3.2) {
+        const x = i * COL_W;
+        const y = surfaceY(x, t);
+        ctx.globalAlpha = Math.min(0.85, (slope + speed) / 12);
+        ctx.beginPath();
+        ctx.arc(x, y, 1.5 + Math.random() * 1.5, 0, 6.283);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Çizim: Gemi ----------
+  function drawShip() {
+    ctx.save();
+    ctx.translate(ship.x, ship.y);
+    ctx.rotate(ship.angle);
+
+    const w = ship.w, h = ship.h;
+
+    // yansıma (suya) — geminin solgun aynası
+    ctx.save();
+    ctx.globalAlpha = 0.16;
+    ctx.scale(1, -1);
+    ctx.translate(0, -h * 1.6);
+    drawHull(w, h, true);
+    ctx.restore();
+
+    // gövde gölgesi (su altı)
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#021a30';
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.4, w * 0.55, h * 0.5, 0, 0, 6.283);
+    ctx.fill();
+    ctx.restore();
+
+    drawHull(w, h, false);
+    drawMastAndSails(w, h);
+
+    ctx.restore();
+  }
+
+  function drawHull(w, h, flat) {
+    // ahşap gövde gradyanı
+    const hg = ctx.createLinearGradient(0, -h * 0.2, 0, h * 0.9);
+    if (flat) {
+      hg.addColorStop(0, '#5a3d23'); hg.addColorStop(1, '#2c1c10');
+    } else {
+      hg.addColorStop(0, '#c98a4b');
+      hg.addColorStop(0.4, '#8a5a30');
+      hg.addColorStop(1, '#4a2f18');
+    }
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, -h * 0.18);
+    ctx.lineTo(w * 0.5, -h * 0.18);
+    ctx.quadraticCurveTo(w * 0.62, h * 0.2, w * 0.36, h * 0.78);
+    ctx.quadraticCurveTo(0, h * 1.0, -w * 0.36, h * 0.78);
+    ctx.quadraticCurveTo(-w * 0.62, h * 0.2, -w * 0.5, -h * 0.18);
+    ctx.closePath();
+    ctx.fill();
+
+    if (flat) return;
+
+    // gövde tahta çizgileri
+    ctx.strokeStyle = 'rgba(40,24,12,0.5)';
+    ctx.lineWidth = 1.4;
+    for (let j = 1; j <= 3; j++) {
+      const yy = -h * 0.18 + (h * 1.0) * (j / 4);
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.5 + j * 3, yy);
+      ctx.quadraticCurveTo(0, yy + h * 0.18, w * 0.5 - j * 3, yy);
+      ctx.stroke();
+    }
+
+    // güverte şeridi (üst parlak kenar)
+    const deck = ctx.createLinearGradient(0, -h * 0.22, 0, -h * 0.05);
+    deck.addColorStop(0, '#f0d9a8'); deck.addColorStop(1, '#b6863f');
+    ctx.fillStyle = deck;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, -h * 0.18);
+    ctx.lineTo(w * 0.5, -h * 0.18);
+    ctx.lineTo(w * 0.46, -h * 0.05);
+    ctx.lineTo(-w * 0.46, -h * 0.05);
+    ctx.closePath();
+    ctx.fill();
+
+    // altın şerit
+    ctx.strokeStyle = '#ffd86b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, -h * 0.05);
+    ctx.quadraticCurveTo(0, h * 0.05, w * 0.5, -h * 0.05);
+    ctx.stroke();
+
+    // lombozlar (pencereler)
+    ctx.fillStyle = '#1b2a3a';
+    for (let p = -1; p <= 1; p++) {
+      ctx.beginPath();
+      ctx.arc(p * w * 0.22, h * 0.28, 4.2, 0, 6.283);
+      ctx.fill();
+      ctx.strokeStyle = '#ffd86b'; ctx.lineWidth = 1.4; ctx.stroke();
+    }
+  }
+
+  function drawMastAndSails(w, h) {
+    // direk
+    ctx.strokeStyle = '#3a2614';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.18);
+    ctx.lineTo(0, -h * 2.4);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath(); // seren
+    ctx.moveTo(-w * 0.3, -h * 1.7);
+    ctx.lineTo(w * 0.3, -h * 1.7);
+    ctx.stroke();
+
+    // ana yelken (rüzgârla şişen)
+    const billow = Math.sin(timeNow * 1.2) * 6 + parseFloat(windEl.value) * 10;
+    const sg = ctx.createLinearGradient(-w * 0.3, 0, w * 0.35, 0);
+    sg.addColorStop(0, '#fdf6e3'); sg.addColorStop(0.5, '#f3e7c4'); sg.addColorStop(1, '#d9c79a');
+    ctx.fillStyle = sg;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 2.35);
+    ctx.quadraticCurveTo(w * 0.32 + billow, -h * 1.6, w * 0.26 + billow * 0.6, -h * 0.7);
+    ctx.quadraticCurveTo(w * 0.1, -h * 0.55, 0, -h * 0.6);
+    ctx.closePath();
+    ctx.fill();
+    // yelken gölgesi
+    ctx.strokeStyle = 'rgba(150,120,70,0.4)'; ctx.lineWidth = 1;
+    for (let s = 1; s <= 3; s++) {
+      ctx.beginPath();
+      ctx.moveTo(0, -h * 2.35 + (h * 1.75) * (s / 4));
+      ctx.quadraticCurveTo(w * 0.2 + billow * 0.6, -h * 1.4 + (h * 0.7) * (s / 4), w * 0.22 + billow * 0.5, -h * 0.7 + (h * 0.1) * (s / 4));
+      ctx.stroke();
+    }
+
+    // küçük üçgen yelken (ön)
+    ctx.fillStyle = '#fdf6e3';
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 2.3);
+    ctx.quadraticCurveTo(-w * 0.28 - billow * 0.5, -h * 1.7, -w * 0.22, -h * 0.9);
+    ctx.lineTo(0, -h * 1.0);
+    ctx.closePath();
+    ctx.fill();
+
+    // bayrak
+    const flagW = 26 + Math.sin(timeNow * 4) * 4;
+    ctx.fillStyle = '#d6334a';
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 2.4);
+    ctx.lineTo(flagW, -h * 2.4 + 4 + Math.sin(timeNow * 5) * 3);
+    ctx.lineTo(0, -h * 2.18);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ---------- Parçacık çizimi ----------
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life) * 0.9;
+      if (p.foam) {
+        ctx.fillStyle = '#ffffff';
+      } else {
+        ctx.fillStyle = 'rgba(190,235,255,0.95)';
+      }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * (0.5 + p.life * 0.5), 0, 6.283);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Girdi (mouse + dokunmatik) ----------
+  const pointer = { x: 0, y: 0, down: false };
+  function getPos(e) {
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX, y: t.clientY };
+  }
+  function onDown(e) {
+    const p = getPos(e);
+    pointer.x = p.x; pointer.y = p.y; pointer.down = true;
+    if (pointInShip(p.x, p.y)) {
+      ship.held = true;
+      canvas.classList.add('dragging');
+    } else {
+      // suya tıkla → dalga + sıçrama
+      if (p.y > baseLevel - 60) {
+        splashAt(p.x, 9, 3);
+        spawnSplash(p.x, surfaceY(p.x, timeNow), 12);
+      }
+    }
+    e.preventDefault();
+  }
+  function onMove(e) {
+    const p = getPos(e);
+    pointer.x = p.x; pointer.y = p.y;
+    e.preventDefault();
+  }
+  function onUp() {
+    if (ship.held) {
+      // bırakınca momentum + sıçrama
+      ship.vx = ship.vx; ship.vy = Math.max(ship.vy, 2);
+      spawnSplash(ship.x, surfaceY(ship.x, timeNow), 14);
+    }
+    ship.held = false;
+    pointer.down = false;
+    canvas.classList.remove('dragging');
+  }
+  canvas.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  canvas.addEventListener('touchstart', onDown, { passive: false });
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('touchend', onUp);
+
+  // ---------- Kontroller ----------
+  const waveSizeEl = document.getElementById('waveSize');
+  const windEl = document.getElementById('wind');
+  const splashEl = document.getElementById('splash');
+  document.getElementById('reset').addEventListener('click', () => {
+    buildWater(); resetShip();
+  });
+  document.getElementById('storm').addEventListener('click', () => {
+    for (let i = 0; i < 14; i++) {
+      const x = Math.random() * W;
+      splashAt(x, (Math.random() - 0.3) * 26, 4);
+      spawnSplash(x, surfaceY(x, timeNow), 18);
+    }
+    ship.vy -= 6; ship.vx += (Math.random() - 0.5) * 14;
+  });
+
+  // ---------- Ana döngü ----------
+  let timeNow = 0, last = performance.now(), fpsAcc = 0, fpsCount = 0;
+  const fpsEl = document.getElementById('fps');
+
+  function loop(now) {
+    const dt = Math.min(40, now - last) / 16.67;
+    last = now;
+    timeNow += dt * 0.016;
+
+    // güncelle (sabit alt-adımlar ile kararlılık)
+    updateWater();
+    updateShip(dt);
+    updateParticles();
+
+    // çiz
+    const sun = drawSky(timeNow);
+    drawWater(timeNow, sun);
+    drawShip();
+    drawParticles();
+
+    // fps
+    fpsAcc += now - (loop._p || now); loop._p = now; fpsCount++;
+    if (fpsCount >= 20) {
+      fpsEl.textContent = Math.round(1000 / (fpsAcc / fpsCount)) + ' FPS · ' + particles.length + ' damla';
+      fpsAcc = 0; fpsCount = 0;
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Başlat ----------
+  window.addEventListener('resize', resize);
+  resize();
+  buildStars();
+  resetShip();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
