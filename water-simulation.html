@@ -168,6 +168,27 @@
 
   body.battle-mode .hud, body.battle-mode .panel, body.battle-mode .war-btn { display: none; }
 
+  .battle-controls {
+    display: none; position: fixed; left: 0; right: 0; bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 16; justify-content: center; align-items: center; gap: 22px;
+  }
+  body.battle-mode .battle-controls { display: flex; }
+  .bc-move, .bc-fire {
+    border: none; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none;
+    color: #fff1f1; font-weight: 800; transition: filter .1s, transform .1s;
+  }
+  .bc-move {
+    width: 64px; height: 64px; border-radius: 50%; font-size: 1.6rem;
+    background: radial-gradient(circle at 35% 30%, #93c5fd, #2563eb 60%, #1e3a8a);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  }
+  .bc-fire {
+    width: 78px; height: 78px; border-radius: 50%; font-size: 1.9rem;
+    background: radial-gradient(circle at 35% 30%, #fca5a5, #dc2626 55%, #7f1d1d);
+    box-shadow: 0 0 18px rgba(220,38,38,0.6), 0 4px 14px rgba(0,0,0,0.45);
+  }
+  .bc-move:active, .bc-fire:active { filter: brightness(1.25); transform: scale(0.92); }
+
   /* Telefon / küçük ekran: panel kaydırılabilir tek satır, HUD daraltılabilir */
   @media (max-width: 640px), (max-height: 480px) {
     .hud { max-width: 70vw; padding: 10px 12px; }
@@ -288,6 +309,12 @@
     <span class="hp-text" id="enemyHpText">100</span>
   </div>
   <button class="battle-quit-btn" id="battleQuit" title="Savaştan çık" aria-label="Savaştan çık">✕</button>
+</div>
+
+<div class="battle-controls" id="battleControls">
+  <button class="bc-move" id="bcLeft" aria-label="Sola">◀</button>
+  <button class="bc-fire" id="bcFire" aria-label="Ateş">💥</button>
+  <button class="bc-move" id="bcRight" aria-label="Sağa">▶</button>
 </div>
 
 <div class="battle-result hidden" id="battleResult">
@@ -2040,6 +2067,19 @@
     if (e.code === 'KeyA' || e.code === 'ArrowLeft') battle.keys.a = false;
     if (e.code === 'KeyD' || e.code === 'ArrowRight') battle.keys.d = false;
   });
+
+  // ---------- Savaş modu dokunmatik kontroller ----------
+  function bindHoldButton(el, onDownFn, onUpFn) {
+    const start = (e) => { e.preventDefault(); onDownFn(); };
+    const end = (e) => { e.preventDefault(); onUpFn(); };
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointerleave', end);
+    el.addEventListener('pointercancel', end);
+  }
+  bindHoldButton(document.getElementById('bcLeft'), () => { battle.keys.a = true; }, () => { battle.keys.a = false; });
+  bindHoldButton(document.getElementById('bcRight'), () => { battle.keys.d = true; }, () => { battle.keys.d = false; });
+  document.getElementById('bcFire').addEventListener('pointerdown', (e) => { e.preventDefault(); fireBattlePlayerCannon(); });
 
   // ---------- Girdi (mouse + dokunmatik) ----------
   // pointer.active: dokunuş canvas üzerinde başladıysa true — panel/slider dokunuşlarını
