@@ -1726,6 +1726,8 @@
   }
 
   // ---------- Savaş modu ----------
+  const ENEMY_WIDTH_SCALE = 1.6;
+  const ENEMY_SPEED_SCALE = 0.45;
   const WAR_SHIPS = [
     { id: 'firkateyn', name: 'Fırkateyn', material: 'wood',
       hullLight: '#c98a4b', hullDark: '#5c3a1e', deck: '#3a2614', trim: '#ffd86b',
@@ -1846,7 +1848,7 @@
       battle.enemyDir = Math.random() < 0.5 ? -1 : 1;
       battle.enemyChangeT = 0.8 + Math.random() * 1.6;
     }
-    battle.enemyX += battle.enemyDir * sd.speed * 0.85 * dt * 1.1;
+    battle.enemyX += battle.enemyDir * sd.speed * ENEMY_SPEED_SCALE * dt * 1.1;
     if (battle.enemyX < margin) { battle.enemyX = margin; battle.enemyDir = 1; }
     if (battle.enemyX > W - margin) { battle.enemyX = W - margin; battle.enemyDir = -1; }
 
@@ -1858,12 +1860,12 @@
       playCannon();
     }
 
-    const playerY = H * 0.82, enemyY = H * 0.16, hitR = 26;
+    const playerY = H * 0.82, enemyY = H * 0.16, hitR = 26, enemyHitR = 26 * ENEMY_WIDTH_SCALE;
 
     for (let i = battle.playerBullets.length - 1; i >= 0; i--) {
       const b = battle.playerBullets[i];
       b.y += b.vy * dt;
-      if (b.y <= enemyY + 10 && Math.abs(b.x - battle.enemyX) < hitR) {
+      if (b.y <= enemyY + 10 && Math.abs(b.x - battle.enemyX) < enemyHitR) {
         battle.enemyHP = Math.max(0, battle.enemyHP - sd.dmg);
         battle.hits.push({ x: b.x, y: enemyY, life: 1 });
         playSplash(22);
@@ -1895,8 +1897,8 @@
     }
   }
 
-  function drawWarShipTopDown(x, y, shipDef, dir) {
-    const w = 38, l = 84;
+  function drawWarShipTopDown(x, y, shipDef, dir, widthScale = 1) {
+    const w = 38 * widthScale, l = 84;
     ctx.save();
     ctx.translate(x, y);
     if (dir === -1) ctx.rotate(Math.PI);
@@ -2035,7 +2037,7 @@
     }
 
     const sd = battle.shipDef;
-    drawWarShipTopDown(battle.enemyX, H * 0.16, sd, -1);
+    drawWarShipTopDown(battle.enemyX, H * 0.16, sd, -1, ENEMY_WIDTH_SCALE);
     drawWarShipTopDown(battle.playerX, H * 0.82, sd, 1);
 
     ctx.fillStyle = '#fde68a';
