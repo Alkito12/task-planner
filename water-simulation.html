@@ -94,6 +94,72 @@
     box-shadow: 0 0 6px rgba(0,0,0,0.4);
   }
 
+  /* ---------- Savaş modu ---------- */
+  .war-btn {
+    position: fixed; top: 50%; right: max(14px, env(safe-area-inset-right)); transform: translateY(-50%);
+    z-index: 12; width: 92px; height: 92px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fca5a5, #dc2626 55%, #7f1d1d);
+    border: 3px solid rgba(254, 202, 202, 0.8);
+    box-shadow: 0 0 22px rgba(220, 38, 38, 0.75), 0 6px 18px rgba(0,0,0,0.5);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    cursor: pointer; color: #fff1f1; transition: transform .12s, filter .15s;
+  }
+  .war-btn:hover { filter: brightness(1.15); }
+  .war-btn:active { transform: translateY(-50%) scale(0.93); }
+  .war-btn .skull { font-size: 2.1rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
+  .war-btn .war-label { font-size: 0.78rem; font-weight: 800; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+
+  .ship-select-menu {
+    position: fixed; inset: 0; z-index: 120;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background: radial-gradient(circle at 50% 35%, rgba(127,29,29,0.55), rgba(2,6,20,0.94) 70%);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    text-align: center; padding: 24px;
+  }
+  .ship-select-menu.hidden { display: none; }
+  .ship-select-menu h2 {
+    font-size: 1.4rem; font-weight: 800; color: #fee2e2; letter-spacing: 0.3px;
+  }
+  .ship-choices { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; max-width: 90vw; }
+  .ship-card {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    background: linear-gradient(180deg, rgba(127,29,29,0.5), rgba(15,23,42,0.7));
+    border: 1.5px solid rgba(252,165,165,0.35); border-radius: 18px;
+    padding: 18px 24px; cursor: pointer; color: #fee2e2;
+    transition: transform .12s, filter .15s, border-color .15s;
+    min-width: 130px;
+  }
+  .ship-card:hover { filter: brightness(1.2); border-color: rgba(252,165,165,0.8); }
+  .ship-card:active { transform: scale(0.95); }
+  .ship-card .swatch { width: 56px; height: 26px; border-radius: 8px; }
+  .ship-card .name { font-size: 0.88rem; font-weight: 700; }
+  .ship-card .stats { font-size: 0.62rem; color: #fbcaca; }
+
+  .battle-hud {
+    position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    z-index: 15; display: flex; gap: 28px; align-items: center;
+    background: rgba(8, 14, 30, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(252,165,165,0.25); border-radius: 14px; padding: 10px 18px;
+  }
+  .battle-hud.hidden { display: none; }
+  .hp-bar { display: flex; align-items: center; gap: 8px; }
+  .hp-bar .hp-label { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.5px; color: #fee2e2; }
+  .hp-track { width: 130px; height: 12px; border-radius: 6px; background: rgba(255,255,255,0.12); overflow: hidden; }
+  .hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg,#4ade80,#22c55e); transition: width .25s; }
+  .hp-bar.enemy .hp-fill { background: linear-gradient(90deg,#f87171,#dc2626); }
+  .hp-text { font-size: 0.68rem; color: #cbd5e1; min-width: 28px; text-align: center; }
+
+  .battle-result {
+    position: fixed; inset: 0; z-index: 130;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: rgba(2,6,20,0.85); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .battle-result.hidden { display: none; }
+  .battle-result h2 { font-size: 1.8rem; font-weight: 800; color: #fee2e2; }
+  .battle-result-btns { display: flex; gap: 14px; }
+
+  body.battle-mode .hud, body.battle-mode .panel, body.battle-mode .war-btn { display: none; }
+
   /* Telefon / küçük ekran: panel kaydırılabilir tek satır, HUD daraltılabilir */
   @media (max-width: 640px), (max-height: 480px) {
     .hud { max-width: 70vw; padding: 10px 12px; }
@@ -193,6 +259,35 @@
 
 <button class="day-night-dot" id="dayNight" title="Gece/Gündüz döngüsü" aria-label="Gece/Gündüz döngüsü"></button>
 <button class="mute-dot" id="muteToggle" title="Ses aç/kapat" aria-label="Ses aç/kapat"></button>
+
+<button class="war-btn" id="warBtn"><span class="skull">💀</span><span class="war-label">SAVAŞ</span></button>
+
+<div class="ship-select-menu hidden" id="shipSelectMenu">
+  <h2>⚔️ Tekne Seç</h2>
+  <div class="ship-choices" id="shipChoices"></div>
+  <button class="btn" id="cancelShipSelect">Vazgeç</button>
+</div>
+
+<div class="battle-hud hidden" id="battleHud">
+  <div class="hp-bar player">
+    <span class="hp-label">SEN</span>
+    <div class="hp-track"><div class="hp-fill" id="playerHpFill"></div></div>
+    <span class="hp-text" id="playerHpText">100</span>
+  </div>
+  <div class="hp-bar enemy">
+    <span class="hp-label">DÜŞMAN</span>
+    <div class="hp-track"><div class="hp-fill" id="enemyHpFill"></div></div>
+    <span class="hp-text" id="enemyHpText">100</span>
+  </div>
+</div>
+
+<div class="battle-result hidden" id="battleResult">
+  <h2 id="battleResultTitle"></h2>
+  <div class="battle-result-btns">
+    <button class="btn" id="battleRetry">↺ Tekrar Oyna</button>
+    <button class="btn alt" id="battleExit">⚓ Sandbox'a Dön</button>
+  </div>
+</div>
 
 <div class="fps" id="fps">–</div>
 
@@ -1594,6 +1689,257 @@
     }
   }
 
+  // ---------- Savaş modu ----------
+  const WAR_SHIPS = [
+    { id: 'firkateyn', name: 'Fırkateyn', hull: '#b91c1c', deck: '#7f1d1d', hp: 100, speed: 7, fireRate: 0.9, dmg: 12 },
+    { id: 'korvet', name: 'Korvet', hull: '#475569', deck: '#1e293b', hp: 90, speed: 9, fireRate: 0.7, dmg: 9 },
+    { id: 'zirhli', name: 'Zırhlı', hull: '#14532d', deck: '#052e16', hp: 130, speed: 5, fireRate: 1.3, dmg: 16 },
+  ];
+
+  const battle = {
+    active: false, frozen: false, result: null, shipDef: null, maxHP: 100,
+    playerX: 0, enemyX: 0, playerHP: 0, enemyHP: 0,
+    enemyDir: 1, enemyChangeT: 1,
+    playerCooldown: 0, enemyCooldown: 0,
+    playerBullets: [], enemyBullets: [], hits: [],
+    keys: { a: false, d: false },
+  };
+
+  const shipSelectMenu = document.getElementById('shipSelectMenu');
+  const shipChoicesEl = document.getElementById('shipChoices');
+  const battleHud = document.getElementById('battleHud');
+  const battleResult = document.getElementById('battleResult');
+  const battleResultTitle = document.getElementById('battleResultTitle');
+  const playerHpFill = document.getElementById('playerHpFill');
+  const enemyHpFill = document.getElementById('enemyHpFill');
+  const playerHpText = document.getElementById('playerHpText');
+  const enemyHpText = document.getElementById('enemyHpText');
+
+  WAR_SHIPS.forEach((sd) => {
+    const card = document.createElement('div');
+    card.className = 'ship-card';
+    card.innerHTML = `<div class="swatch" style="background:${sd.hull}"></div>` +
+      `<div class="name">${sd.name}</div>` +
+      `<div class="stats">❤️ ${sd.hp} · 🚀 ${sd.speed} · 💣 ${sd.fireRate}s</div>`;
+    card.addEventListener('click', () => {
+      closeShipSelect();
+      startBattle(sd);
+    });
+    shipChoicesEl.appendChild(card);
+  });
+
+  function openShipSelect() { shipSelectMenu.classList.remove('hidden'); }
+  function closeShipSelect() { shipSelectMenu.classList.add('hidden'); }
+
+  function updateHpUI() {
+    const max = battle.maxHP || 1;
+    const pPct = Math.max(0, battle.playerHP / max * 100);
+    const ePct = Math.max(0, battle.enemyHP / max * 100);
+    playerHpFill.style.width = pPct + '%';
+    enemyHpFill.style.width = ePct + '%';
+    playerHpText.textContent = Math.round(Math.max(0, battle.playerHP));
+    enemyHpText.textContent = Math.round(Math.max(0, battle.enemyHP));
+  }
+
+  function startBattle(shipDef) {
+    ensureAudio();
+    battle.shipDef = shipDef;
+    battle.maxHP = shipDef.hp;
+    battle.playerHP = shipDef.hp;
+    battle.enemyHP = shipDef.hp;
+    battle.playerX = W * 0.5;
+    battle.enemyX = W * 0.5;
+    battle.enemyDir = Math.random() < 0.5 ? -1 : 1;
+    battle.enemyChangeT = 0.8 + Math.random() * 1.6;
+    battle.playerBullets.length = 0;
+    battle.enemyBullets.length = 0;
+    battle.hits.length = 0;
+    battle.playerCooldown = 0;
+    battle.enemyCooldown = 40 + Math.random() * 60;
+    battle.result = null;
+    battle.frozen = false;
+    battle.active = true;
+    document.body.classList.add('battle-mode');
+    battleHud.classList.remove('hidden');
+    battleResult.classList.add('hidden');
+    updateHpUI();
+  }
+
+  function endBattle(result) {
+    battle.result = result;
+    battle.frozen = true;
+    if (result === 'win') { playReset(); } else { playWreck(); }
+    battleResultTitle.textContent = result === 'win' ? '🏆 Kazandın!' : '💀 Kaybettin!';
+    battleResult.classList.remove('hidden');
+  }
+
+  function exitBattle() {
+    battle.active = false;
+    battle.frozen = false;
+    document.body.classList.remove('battle-mode');
+    battleHud.classList.add('hidden');
+    battleResult.classList.add('hidden');
+  }
+
+  function fireBattlePlayerCannon() {
+    if (!battle.active || battle.frozen || battle.playerCooldown > 0) return;
+    const sd = battle.shipDef;
+    battle.playerCooldown = sd.fireRate * 60;
+    battle.playerBullets.push({ x: battle.playerX, y: H * 0.82 - 30, vy: -14 });
+    playCannon();
+  }
+
+  function updateBattle(dt) {
+    if (battle.frozen) return;
+    const sd = battle.shipDef;
+    const margin = 50;
+
+    let vx = 0;
+    if (battle.keys.d) vx += sd.speed;
+    if (battle.keys.a) vx -= sd.speed;
+    battle.playerX = Math.max(margin, Math.min(W - margin, battle.playerX + vx * dt * 1.1));
+
+    battle.enemyChangeT -= dt * 0.016;
+    if (battle.enemyChangeT <= 0) {
+      battle.enemyDir = Math.random() < 0.5 ? -1 : 1;
+      battle.enemyChangeT = 0.8 + Math.random() * 1.6;
+    }
+    battle.enemyX += battle.enemyDir * sd.speed * 0.85 * dt * 1.1;
+    if (battle.enemyX < margin) { battle.enemyX = margin; battle.enemyDir = 1; }
+    if (battle.enemyX > W - margin) { battle.enemyX = W - margin; battle.enemyDir = -1; }
+
+    if (battle.playerCooldown > 0) battle.playerCooldown -= dt;
+    battle.enemyCooldown -= dt;
+    if (battle.enemyCooldown <= 0) {
+      battle.enemyCooldown = sd.fireRate * 60 * (0.8 + Math.random() * 0.7);
+      battle.enemyBullets.push({ x: battle.enemyX, y: H * 0.16 + 30, vy: 13 });
+      playCannon();
+    }
+
+    const playerY = H * 0.82, enemyY = H * 0.16, hitR = 26;
+
+    for (let i = battle.playerBullets.length - 1; i >= 0; i--) {
+      const b = battle.playerBullets[i];
+      b.y += b.vy * dt;
+      if (b.y <= enemyY + 10 && Math.abs(b.x - battle.enemyX) < hitR) {
+        battle.enemyHP = Math.max(0, battle.enemyHP - sd.dmg);
+        battle.hits.push({ x: b.x, y: enemyY, life: 1 });
+        playSplash(22);
+        battle.playerBullets.splice(i, 1);
+        updateHpUI();
+        if (battle.enemyHP <= 0) { endBattle('win'); return; }
+        continue;
+      }
+      if (b.y < -20) battle.playerBullets.splice(i, 1);
+    }
+    for (let i = battle.enemyBullets.length - 1; i >= 0; i--) {
+      const b = battle.enemyBullets[i];
+      b.y += b.vy * dt;
+      if (b.y >= playerY - 10 && Math.abs(b.x - battle.playerX) < hitR) {
+        battle.playerHP = Math.max(0, battle.playerHP - sd.dmg);
+        battle.hits.push({ x: b.x, y: playerY, life: 1 });
+        playSplash(22);
+        battle.enemyBullets.splice(i, 1);
+        updateHpUI();
+        if (battle.playerHP <= 0) { endBattle('lose'); return; }
+        continue;
+      }
+      if (b.y > H + 20) battle.enemyBullets.splice(i, 1);
+    }
+
+    for (let i = battle.hits.length - 1; i >= 0; i--) {
+      battle.hits[i].life -= dt * 0.08;
+      if (battle.hits[i].life <= 0) battle.hits.splice(i, 1);
+    }
+  }
+
+  function drawWarShipTopDown(x, y, shipDef, dir) {
+    const w = 34, l = 74;
+    ctx.save();
+    ctx.translate(x, y);
+    if (dir === -1) ctx.rotate(Math.PI);
+    ctx.beginPath();
+    ctx.moveTo(0, -l / 2);
+    ctx.quadraticCurveTo(w / 2, -l / 2 + l * 0.22, w / 2, l / 2 - l * 0.12);
+    ctx.quadraticCurveTo(w / 2, l / 2, 0, l / 2);
+    ctx.quadraticCurveTo(-w / 2, l / 2, -w / 2, l / 2 - l * 0.12);
+    ctx.quadraticCurveTo(-w / 2, -l / 2 + l * 0.22, 0, -l / 2);
+    ctx.closePath();
+    ctx.fillStyle = shipDef.hull;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath();
+    ctx.rect(-w * 0.22, -l * 0.3, w * 0.44, l * 0.6);
+    ctx.fillStyle = shipDef.deck;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, 5, 0, 6.283);
+    ctx.fillStyle = '#1f2937';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawBattleScene() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0b2a4a');
+    g.addColorStop(0.5, '#08203b');
+    g.addColorStop(1, '#0b2a4a');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(252,165,165,0.25)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 10]);
+    ctx.beginPath();
+    ctx.moveTo(0, H * 0.5);
+    ctx.lineTo(W, H * 0.5);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(125,211,252,0.08)';
+    ctx.lineWidth = 1;
+    const step = H / 18;
+    for (let i = 0; i < 18; i++) {
+      const y = (i * step + timeNow * 18) % H;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+    }
+
+    const sd = battle.shipDef;
+    drawWarShipTopDown(battle.enemyX, H * 0.16, sd, -1);
+    drawWarShipTopDown(battle.playerX, H * 0.82, sd, 1);
+
+    ctx.fillStyle = '#fde68a';
+    for (const b of battle.playerBullets) { ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, 6.283); ctx.fill(); }
+    ctx.fillStyle = '#fca5a5';
+    for (const b of battle.enemyBullets) { ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, 6.283); ctx.fill(); }
+
+    for (const h of battle.hits) {
+      ctx.strokeStyle = `rgba(255,210,120,${h.life})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(h.x, h.y, 26 * (1.3 - h.life), 0, 6.283);
+      ctx.stroke();
+    }
+  }
+
+  document.getElementById('warBtn').addEventListener('click', () => { ensureAudio(); openShipSelect(); });
+  document.getElementById('cancelShipSelect').addEventListener('click', closeShipSelect);
+  document.getElementById('battleRetry').addEventListener('click', () => { startBattle(battle.shipDef); });
+  document.getElementById('battleExit').addEventListener('click', exitBattle);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') battle.keys.a = true;
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') battle.keys.d = true;
+    if (e.code === 'Space') { fireBattlePlayerCannon(); if (battle.active) e.preventDefault(); }
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') battle.keys.a = false;
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') battle.keys.d = false;
+  });
+
   // ---------- Girdi (mouse + dokunmatik) ----------
   // pointer.active: dokunuş canvas üzerinde başladıysa true — panel/slider dokunuşlarını
   // engellemeyiz, sadece gemi/su etkileşimini takip ederiz.
@@ -1603,6 +1949,7 @@
     return { x: t.clientX, y: t.clientY };
   }
   function onDown(e) {
+    if (battle.active) return;
     const p = getPos(e);
     pointer.x = p.x; pointer.y = p.y; pointer.down = true; pointer.active = true;
     if (ship.state === 'float' && pointInShip(p.x, p.y)) {
@@ -1707,37 +2054,42 @@
     last = now;
     timeNow += dt * 0.016;
 
-    // güncelle (sabit alt-adımlar ile kararlılık)
-    if (dayNightOn) cycleT = (cycleT + dt * 0.016 / CYCLE_DURATION) % 1;
-    updateTsunami(dt);
-    updateWater();
-    updateShip(dt);
-    updateBalls(dt);
-    updateKraken(dt);
-    updateDebris(dt);
-    updateBubbles(dt);
-    updateRain();
-    updateAcidRain();
-    updateParticles();
-    updateFlashes(dt);
-    updateLightning(dt);
-    updateGoo(dt);
-    updateAudio();
+    if (battle.active) {
+      updateBattle(dt);
+      drawBattleScene();
+    } else {
+      // güncelle (sabit alt-adımlar ile kararlılık)
+      if (dayNightOn) cycleT = (cycleT + dt * 0.016 / CYCLE_DURATION) % 1;
+      updateTsunami(dt);
+      updateWater();
+      updateShip(dt);
+      updateBalls(dt);
+      updateKraken(dt);
+      updateDebris(dt);
+      updateBubbles(dt);
+      updateRain();
+      updateAcidRain();
+      updateParticles();
+      updateFlashes(dt);
+      updateLightning(dt);
+      updateGoo(dt);
+      updateAudio();
 
-    // çiz
-    const sun = drawSky(timeNow);
-    drawWater(timeNow, sun);
-    drawGoo(timeNow);
-    drawFlashes(timeNow);
-    drawBubbles();
-    drawKraken();
-    drawShip();
-    drawDebris();
-    drawBalls();
-    drawParticles();
-    drawRain();
-    drawAcidRain();
-    drawLightning();
+      // çiz
+      const sun = drawSky(timeNow);
+      drawWater(timeNow, sun);
+      drawGoo(timeNow);
+      drawFlashes(timeNow);
+      drawBubbles();
+      drawKraken();
+      drawShip();
+      drawDebris();
+      drawBalls();
+      drawParticles();
+      drawRain();
+      drawAcidRain();
+      drawLightning();
+    }
 
     // fps
     fpsAcc += now - (loop._p || now); loop._p = now; fpsCount++;
