@@ -67,6 +67,19 @@
     z-index: 10; font-size: 0.66rem; color: #64748b;
     background: rgba(8,14,30,0.5); padding: 5px 9px; border-radius: 8px; white-space: nowrap; }
 
+  .day-night-dot {
+    position: fixed; top: max(6px, env(safe-area-inset-top)); left: max(6px, env(safe-area-inset-left));
+    z-index: 11; width: 16px; height: 16px; border-radius: 50%;
+    background: transparent; border: 2px solid rgba(190, 210, 255, 0.55);
+    box-shadow: 0 0 6px rgba(0,0,0,0.4);
+    padding: 0; cursor: pointer; transition: background 0.4s, box-shadow 0.4s, border-color 0.4s;
+  }
+  .day-night-dot.on {
+    background: radial-gradient(circle at 35% 30%, #fff4d8, #ffd86b 60%, #f0a93a);
+    border-color: rgba(255, 216, 107, 0.9);
+    box-shadow: 0 0 12px rgba(255, 216, 107, 0.8);
+  }
+
   /* Telefon / küçük ekran: panel kaydırılabilir tek satır, HUD daraltılabilir */
   @media (max-width: 640px), (max-height: 480px) {
     .hud { max-width: 70vw; padding: 10px 12px; }
@@ -161,8 +174,10 @@
   <p>Gemiye <span class="key">basılı tut</span> ve suda <span class="key">sürükle</span>.
   Bıraktığında su dalgalanır ve <span class="key">fışkırır</span>. Suya tıklayarak da dalga oluştur.
   <br>🦑 <span class="key">Kraken</span> gemiyi kapıp dibe çeker ve parçalar. 🧪 <span class="key">Asit Yağmuru</span> gemiyi eritir —
-  her iki durumda da <span class="key">Sıfırla</span> ile onar. 🌗 <span class="key">Gece/Gündüz</span> döngüsünü açıp kapatabilirsin.</p>
+  her iki durumda da <span class="key">Sıfırla</span> ile onar. Sol üstteki <span class="key">nokta</span> gece/gündüz döngüsünü açıp kapatır.</p>
 </div>
+
+<button class="day-night-dot" id="dayNight" title="Gece/Gündüz döngüsü" aria-label="Gece/Gündüz döngüsü"></button>
 
 <div class="fps" id="fps">–</div>
 
@@ -185,7 +200,6 @@
   <button class="btn alt" id="cannon">💣 Top Ateşle</button>
   <button class="btn alt" id="kraken">🦑 Kraken</button>
   <button class="btn alt" id="acidRain">🧪 Asit Yağmuru</button>
-  <button class="btn alt" id="dayNight">🌗 Gece/Gündüz</button>
   <button class="btn" id="reset">↺ Sıfırla</button>
 </div>
 
