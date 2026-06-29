@@ -80,6 +80,20 @@
     box-shadow: 0 0 12px rgba(255, 216, 107, 0.8);
   }
 
+  .mute-dot {
+    position: fixed; top: max(6px, env(safe-area-inset-top)); left: calc(max(6px, env(safe-area-inset-left)) + 26px);
+    z-index: 11; width: 16px; height: 16px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #a7f3d0, #34d399 60%, #059669);
+    border: 2px solid rgba(167, 243, 208, 0.9);
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.7);
+    padding: 0; cursor: pointer; transition: background 0.3s, box-shadow 0.3s, border-color 0.3s;
+  }
+  .mute-dot.muted {
+    background: transparent;
+    border-color: rgba(190, 210, 255, 0.55);
+    box-shadow: 0 0 6px rgba(0,0,0,0.4);
+  }
+
   /* Telefon / küçük ekran: panel kaydırılabilir tek satır, HUD daraltılabilir */
   @media (max-width: 640px), (max-height: 480px) {
     .hud { max-width: 70vw; padding: 10px 12px; }
@@ -178,6 +192,7 @@
 </div>
 
 <button class="day-night-dot" id="dayNight" title="Gece/Gündüz döngüsü" aria-label="Gece/Gündüz döngüsü"></button>
+<button class="mute-dot" id="muteToggle" title="Ses aç/kapat" aria-label="Ses aç/kapat"></button>
 
 <div class="fps" id="fps">–</div>
 
@@ -208,6 +223,249 @@
   "use strict";
   const canvas = document.getElementById('scene');
   const ctx = canvas.getContext('2d', { alpha: false });
+
+  // ---------- Ses motoru (Web Audio API, dışarıdan dosya yok) ----------
+  let audioCtx = null, masterGain = null, sfxGain = null, ambientGain = null;
+  let noiseBuffer = null, audioMuted = false;
+  let waveGain = null, windGain = null, rainGain = null, acidGain = null;
+
+  function makeNoiseBuffer() {
+    const len = audioCtx.sampleRate * 2;
+    const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+  function noiseSource(loop) {
+    const src = audioCtx.createBufferSource();
+    src.buffer = noiseBuffer;
+    src.loop = !!loop;
+    return src;
+  }
+  function startAmbientLoops() {
+    const wave = noiseSource(true);
+    const waveFilter = audioCtx.createBiquadFilter();
+    waveFilter.type = 'lowpass'; waveFilter.frequency.value = 380;
+    waveGain = audioCtx.createGain(); waveGain.gain.value = 0.16;
+    wave.connect(waveFilter); waveFilter.connect(waveGain); waveGain.connect(ambientGain);
+    wave.start();
+
+    const wind = noiseSource(true);
+    const windFilter = audioCtx.createBiquadFilter();
+    windFilter.type = 'bandpass'; windFilter.frequency.value = 900; windFilter.Q.value = 0.7;
+    windGain = audioCtx.createGain(); windGain.gain.value = 0;
+    wind.connect(windFilter); windFilter.connect(windGain); windGain.connect(ambientGain);
+    wind.start();
+
+    const rain = noiseSource(true);
+    const rainFilter = audioCtx.createBiquadFilter();
+    rainFilter.type = 'highpass'; rainFilter.frequency.value = 1700;
+    rainGain = audioCtx.createGain(); rainGain.gain.value = 0;
+    rain.connect(rainFilter); rainFilter.connect(rainGain); rainGain.connect(ambientGain);
+    rain.start();
+
+    const acid = noiseSource(true);
+    const acidFilter = audioCtx.createBiquadFilter();
+    acidFilter.type = 'bandpass'; acidFilter.frequency.value = 2600; acidFilter.Q.value = 0.9;
+    acidGain = audioCtx.createGain(); acidGain.gain.value = 0;
+    acid.connect(acidFilter); acidFilter.connect(acidGain); acidGain.connect(ambientGain);
+    acid.start();
+  }
+  function ensureAudio() {
+    if (audioCtx) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return;
+    }
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain(); masterGain.gain.value = audioMuted ? 0 : 0.85;
+    masterGain.connect(audioCtx.destination);
+    sfxGain = audioCtx.createGain(); sfxGain.gain.value = 1;
+    ambientGain = audioCtx.createGain(); ambientGain.gain.value = 1;
+    sfxGain.connect(masterGain); ambientGain.connect(masterGain);
+    noiseBuffer = makeNoiseBuffer();
+    startAmbientLoops();
+  }
+  function toggleMute() {
+    audioMuted = !audioMuted;
+    if (masterGain) masterGain.gain.setTargetAtTime(audioMuted ? 0 : 0.85, audioCtx.currentTime, 0.05);
+    return audioMuted;
+  }
+
+  // -- kısa efektler --
+  function playSplash(power) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const amt = Math.min(1, 0.18 + power * 0.018);
+    const src = noiseSource();
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = Math.max(280, 1700 - power * 16); bp.Q.value = 1.1;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(amt * 0.6, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.32 + Math.min(0.35, power * 0.008));
+    src.connect(bp); bp.connect(g); g.connect(sfxGain);
+    src.start(t); src.stop(t + 0.8);
+
+    const osc = audioCtx.createOscillator(); osc.type = 'sine';
+    osc.frequency.setValueAtTime(210 + power * 1.5, t);
+    osc.frequency.exponentialRampToValueAtTime(55, t + 0.17);
+    const og = audioCtx.createGain();
+    og.gain.setValueAtTime(amt * 0.45, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    osc.connect(og); og.connect(sfxGain);
+    osc.start(t); osc.stop(t + 0.25);
+  }
+  function playCannon() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(3500, t); lp.frequency.exponentialRampToValueAtTime(170, t + 0.5);
+    const ng = audioCtx.createGain();
+    ng.gain.setValueAtTime(0.9, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    noise.connect(lp); lp.connect(ng); ng.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.6);
+
+    const osc = audioCtx.createOscillator(); osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(34, t + 0.35);
+    const og = audioCtx.createGain();
+    og.gain.setValueAtTime(1, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    osc.connect(og); og.connect(sfxGain);
+    osc.start(t); osc.stop(t + 0.5);
+  }
+  function playThunder() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime + 0.1 + Math.random() * 0.25;
+    const noise = noiseSource();
+    const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1100, t); lp.frequency.exponentialRampToValueAtTime(75, t + 1.6);
+    const ng = audioCtx.createGain();
+    ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.65, t + 0.05);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+    noise.connect(lp); lp.connect(ng); ng.connect(sfxGain);
+    noise.start(t); noise.stop(t + 2);
+
+    const osc = audioCtx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 52;
+    const og = audioCtx.createGain();
+    og.gain.setValueAtTime(0.55, t); og.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+    osc.connect(og); og.connect(sfxGain);
+    osc.start(t); osc.stop(t + 1.5);
+  }
+  function playKraken() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const o1 = audioCtx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 68;
+    const o2 = audioCtx.createOscillator(); o2.type = 'sine'; o2.frequency.value = 71;
+    const lfo = audioCtx.createOscillator(); lfo.frequency.value = 4.2;
+    const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 6;
+    lfo.connect(lfoGain); lfoGain.connect(o1.frequency); lfoGain.connect(o2.frequency);
+    const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.5, t + 0.6);
+    g.gain.linearRampToValueAtTime(0.35, t + 1.6);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.6);
+    o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(sfxGain);
+    o1.start(t); o2.start(t); lfo.start(t);
+    o1.stop(t + 2.7); o2.stop(t + 2.7); lfo.stop(t + 2.7);
+  }
+  function playWreck() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 0.8;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.45);
+    playSplash(34);
+  }
+  function playMeltFinish() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(2200, t); bp.frequency.exponentialRampToValueAtTime(300, t + 0.9);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 1.05);
+  }
+  function playSizzle() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'highpass'; bp.frequency.value = 2800 + Math.random() * 1200;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.15);
+  }
+  function playTsunamiWhoosh() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(180, t);
+    bp.frequency.linearRampToValueAtTime(900, t + 0.9);
+    bp.frequency.linearRampToValueAtTime(150, t + 2.2);
+    bp.Q.value = 0.9;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.6, t + 0.7);
+    g.gain.linearRampToValueAtTime(0.4, t + 1.4);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.3);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 2.4);
+  }
+  function playGust() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(400, t); bp.frequency.linearRampToValueAtTime(1500, t + 0.3);
+    bp.frequency.linearRampToValueAtTime(300, t + 0.8);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.95);
+    playSplash(40);
+  }
+  function playReset() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    [660, 880].forEach((f, i) => {
+      const osc = audioCtx.createOscillator(); osc.type = 'sine'; osc.frequency.value = f;
+      const g = audioCtx.createGain();
+      const st = t + i * 0.09;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.linearRampToValueAtTime(0.3, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.3);
+      osc.connect(g); g.connect(sfxGain);
+      osc.start(st); osc.stop(st + 0.32);
+    });
+  }
+  function playToggle(isOn) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(); osc.type = 'triangle';
+    osc.frequency.value = isOn ? 520 : 360;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.25, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    osc.connect(g); g.connect(sfxGain);
+    osc.start(t); osc.stop(t + 0.18);
+  }
+
+  function updateAudio() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const windAmt = parseFloat(windEl.value) || 0;
+    windGain.gain.setTargetAtTime(Math.min(0.5, windAmt * 0.06), t, 0.4);
+    rainGain.gain.setTargetAtTime(raining ? 0.22 : 0, t, 0.4);
+    acidGain.gain.setTargetAtTime(acidRaining ? 0.2 : 0, t, 0.4);
+  }
 
   // ---------- Boyut / DPI yönetimi ----------
   let W = 0, H = 0, DPR = 1;
@@ -351,6 +609,7 @@
     tsunami.amp = Math.min(H * 0.42, 150 + Math.random() * 120);
     tsunami.width = 110 + Math.random() * 60;
     tsunami.speed = 6 + Math.random() * 3;
+    playTsunamiWhoosh();
   }
   function updateTsunami(dt) {
     if (!tsunami.active) return;
@@ -456,6 +715,7 @@
     ship.vx -= dir * 2.5;          // geri tepme
     ship.vy -= 1.2;
     spawnSplash(mx, my, 8, dir);   // namlu dumanı yerine kıvılcım
+    playCannon();
   }
   function updateBalls(dt) {
     for (let k = balls.length - 1; k >= 0; k--) {
@@ -507,6 +767,7 @@
   function wreckShip() {
     if (ship.state === 'wrecked') return;
     ship.state = 'wrecked';
+    playWreck();
     const cx = ship.x, cy = ship.y;
     const woods = ['#c98a4b', '#8a5a30', '#6e4423', '#a06a38', '#4a2f18'];
     // gövde tahtaları
@@ -595,6 +856,7 @@
       });
     }
     splashAt(kraken.x, -10, 5);
+    playKraken();
   }
   function updateKraken(dt) {
     if (!kraken.active) return;
@@ -694,6 +956,7 @@
       nextBolt = timeNow + 2 + Math.random() * 5;
       flash = 1;
       bolt = makeBolt(Math.random() * W, baseLevel);
+      playThunder();
     }
   }
   let bolt = null;
@@ -723,6 +986,7 @@
   }
 
   // ---------- Gemi ----------
+  let shipSplashCooldown = 0;
   const ship = {
     x: 0, y: 0,
     w: 150, h: 56,
@@ -750,6 +1014,7 @@
     ship.state = 'melting';
     ship.meltT = 0;
     spawnImpactFlash(ship.x, surfaceY(ship.x, timeNow), 1.1, 'acid');
+    playSizzle();
   }
   function finishMelt() {
     ship.state = 'melted';
@@ -757,6 +1022,7 @@
     spawnSplash(ship.x, sy, 30, 0, 'acid');
     goo.push({ x: ship.x, life: 1 });
     for (let i = 0; i < 18; i++) spawnBubble(ship.x + (Math.random() - 0.5) * ship.w, ship.y + (Math.random() - 0.5) * ship.h);
+    playMeltFinish();
   }
 
   // ---------- Asit gölcüğü (gemi eridikten sonra suda kalan iz) ----------
@@ -791,6 +1057,7 @@
       ship.vy *= 0.9;
       if (Math.random() < 0.5) spawnBubble(ship.x + (Math.random() - 0.5) * ship.w, ship.y + (Math.random() - 0.5) * ship.h);
       if (Math.random() < 0.4) spawnSplash(ship.x + (Math.random() - 0.5) * ship.w * 0.7, surfaceY(ship.x, timeNow), 2, 0, 'acid');
+      if (Math.random() < 0.06) playSizzle();
       if (ship.meltT >= 1) finishMelt();
       return;
     }
@@ -841,8 +1108,10 @@
         spawnSplash(ship.x - ship.w * 0.3, sy, ship.vy * 1.4, -1);
         spawnSplash(ship.x + ship.w * 0.3, sy, ship.vy * 1.4, 1);
         splashAt(ship.x, -ship.vy * 0.7, 3);
+        if (shipSplashCooldown <= 0) { playSplash(ship.vy * 8); shipSplashCooldown = 24; }
       }
     }
+    if (shipSplashCooldown > 0) shipSplashCooldown -= dt;
 
     // gemi geçtiği yerde sürekli küçük yer değiştirme (su seviyesini bastır)
     if (ship.held) {
@@ -1369,6 +1638,7 @@
 
       splashAt(ship.x, -Math.min(28, 6 + speed * 1.9), 6);                 // dev dalga tepesi
       spawnImpactFlash(ship.x, sy, Math.min(1.9, 0.7 + speed * 0.08));     // parlak çarpma ışığı
+      playSplash(power);
 
       ship.vy = Math.max(ship.vy, 2.5 + Math.min(7, speed * 0.45));
     }
@@ -1389,6 +1659,7 @@
   const splashEl = document.getElementById('splash');
   document.getElementById('reset').addEventListener('click', () => {
     buildWater(); resetShip();
+    playReset();
   });
   document.getElementById('storm').addEventListener('click', () => {
     for (let i = 0; i < 14; i++) {
@@ -1397,6 +1668,7 @@
       spawnSplash(x, surfaceY(x, timeNow), 18);
     }
     ship.vy -= 6; ship.vx += (Math.random() - 0.5) * 14;
+    playGust();
   });
   document.getElementById('tsunami').addEventListener('click', launchTsunami);
   document.getElementById('cannon').addEventListener('click', fireCannon);
@@ -1405,16 +1677,25 @@
   rainBtn.addEventListener('click', () => {
     raining = !raining;
     rainBtn.classList.toggle('on', raining);
+    playToggle(raining);
   });
   const acidRainBtn = document.getElementById('acidRain');
   acidRainBtn.addEventListener('click', () => {
     acidRaining = !acidRaining;
     acidRainBtn.classList.toggle('on', acidRaining);
+    playToggle(acidRaining);
   });
   const dayNightBtn = document.getElementById('dayNight');
   dayNightBtn.addEventListener('click', () => {
     dayNightOn = !dayNightOn;
     dayNightBtn.classList.toggle('on', dayNightOn);
+    playToggle(dayNightOn);
+  });
+  const muteBtn = document.getElementById('muteToggle');
+  muteBtn.addEventListener('click', () => {
+    ensureAudio();
+    const muted = toggleMute();
+    muteBtn.classList.toggle('muted', muted);
   });
 
   // ---------- Ana döngü ----------
@@ -1441,6 +1722,7 @@
     updateFlashes(dt);
     updateLightning(dt);
     updateGoo(dt);
+    updateAudio();
 
     // çiz
     const sun = drawSky(timeNow);
@@ -1487,11 +1769,15 @@
     startMenu.classList.add('hidden');
   }
   document.getElementById('choosePhone').addEventListener('click', () => {
+    ensureAudio();
     closeStartMenu();
     mobileWarning.classList.add('show');
     setTimeout(() => mobileWarning.classList.remove('show'), 3000);
   });
-  document.getElementById('choosePC').addEventListener('click', closeStartMenu);
+  document.getElementById('choosePC').addEventListener('click', () => {
+    ensureAudio();
+    closeStartMenu();
+  });
 
   // ---------- Başlat ----------
   let resizeTimer = null;
