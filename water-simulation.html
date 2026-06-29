@@ -161,7 +161,7 @@
   <p>Gemiye <span class="key">basılı tut</span> ve suda <span class="key">sürükle</span>.
   Bıraktığında su dalgalanır ve <span class="key">fışkırır</span>. Suya tıklayarak da dalga oluştur.
   <br>🦑 <span class="key">Kraken</span> gemiyi kapıp dibe çeker ve parçalar. 🧪 <span class="key">Asit Yağmuru</span> gemiyi eritir —
-  her iki durumda da <span class="key">Sıfırla</span> ile onar.</p>
+  her iki durumda da <span class="key">Sıfırla</span> ile onar. 🌗 <span class="key">Gece/Gündüz</span> döngüsünü açıp kapatabilirsin.</p>
 </div>
 
 <div class="fps" id="fps">–</div>
@@ -185,6 +185,7 @@
   <button class="btn alt" id="cannon">💣 Top Ateşle</button>
   <button class="btn alt" id="kraken">🦑 Kraken</button>
   <button class="btn alt" id="acidRain">🧪 Asit Yağmuru</button>
+  <button class="btn alt" id="dayNight">🌗 Gece/Gündüz</button>
   <button class="btn" id="reset">↺ Sıfırla</button>
 </div>
 
@@ -865,34 +866,120 @@
     }
   }
 
+  // ---------- Gece/Gündüz döngüsü ----------
+  let dayNightOn = false;
+  let cycleT = 0;                 // 0..1, bir tam günü temsil eder
+  const CYCLE_DURATION = 50;      // saniye
+  function lerpColor(c1, c2, f) {
+    const a = parseInt(c1.slice(1), 16), b = parseInt(c2.slice(1), 16);
+    const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+    const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+    const r = Math.round(ar + (br - ar) * f), g = Math.round(ag + (bg - ag) * f), bl = Math.round(ab + (bb - ab) * f);
+    return `rgb(${r},${g},${bl})`;
+  }
   function drawSky(t) {
-    ctx.fillStyle = skyGrad;
+    if (!dayNightOn) {
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, W, baseLevel + 60);
+
+      // yıldızlar
+      for (const s of stars) {
+        const alpha = (0.3 + 0.7 * Math.abs(Math.sin(s.tw + t * 1.5))) * (1 - s.y / 0.5);
+        ctx.globalAlpha = Math.max(0, alpha) * 0.8;
+        ctx.fillStyle = '#dbeafe';
+        ctx.beginPath();
+        ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // güneş / ay halesi
+      const sunX = W * 0.78, sunY = baseLevel * 0.42;
+      const halo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 220);
+      halo.addColorStop(0, 'rgba(255,236,190,0.95)');
+      halo.addColorStop(0.18, 'rgba(255,210,150,0.6)');
+      halo.addColorStop(0.5, 'rgba(255,180,120,0.18)');
+      halo.addColorStop(1, 'rgba(255,180,120,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(sunX - 240, sunY - 240, 480, 480);
+      ctx.fillStyle = '#fff4d8';
+      ctx.beginPath(); ctx.arc(sunX, sunY, 46, 0, 6.283); ctx.fill();
+
+      return { sunX, sunY };
+    }
+
+    // ---- dinamik döngü ----
+    const theta = cycleT * Math.PI * 2;
+    const elevation = Math.sin(theta);              // >0 gündüz, <0 gece
+    const dayFactor = elevation * 0.5 + 0.5;         // 0..1
+    const warm = Math.max(0, 1 - Math.abs(elevation) / 0.3); // gün doğumu/batımı sıcaklığı
+
+    const top = lerpColor('#02040f', '#1e6fc9', dayFactor);
+    const mid = lerpColor('#0a1635', '#4fa8e0', dayFactor);
+    const horizonBase = lerpColor('#152040', '#bfe3f5', dayFactor);
+    const horizon = warm > 0.02 ? lerpColor(horizonBase, '#ff8a4d', warm) : horizonBase;
+    const skyDyn = ctx.createLinearGradient(0, 0, 0, baseLevel + 40);
+    skyDyn.addColorStop(0.00, top);
+    skyDyn.addColorStop(0.45, mid);
+    skyDyn.addColorStop(0.85, horizon);
+    skyDyn.addColorStop(1.00, warm > 0.15 ? lerpColor(horizon, '#f4c98a', warm) : horizon);
+    ctx.fillStyle = skyDyn;
     ctx.fillRect(0, 0, W, baseLevel + 60);
 
-    // yıldızlar
-    for (const s of stars) {
-      const alpha = (0.3 + 0.7 * Math.abs(Math.sin(s.tw + t * 1.5))) * (1 - s.y / 0.5);
-      ctx.globalAlpha = Math.max(0, alpha) * 0.8;
-      ctx.fillStyle = '#dbeafe';
-      ctx.beginPath();
-      ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283);
-      ctx.fill();
+    // yıldızlar: sadece gece görünür, gün doğumuna/batımına yaklaşırken sönükleşir
+    const starVis = Math.max(0, -elevation);
+    if (starVis > 0.02) {
+      for (const s of stars) {
+        const tw = (0.3 + 0.7 * Math.abs(Math.sin(s.tw + t * 1.5))) * (1 - s.y / 0.5);
+        ctx.globalAlpha = Math.max(0, tw) * 0.8 * starVis;
+        ctx.fillStyle = '#dbeafe';
+        ctx.beginPath();
+        ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
-    ctx.globalAlpha = 1;
 
-    // güneş / ay halesi
-    const sunX = W * 0.78, sunY = baseLevel * 0.42;
-    const halo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 220);
-    halo.addColorStop(0, 'rgba(255,236,190,0.95)');
-    halo.addColorStop(0.18, 'rgba(255,210,150,0.6)');
-    halo.addColorStop(0.5, 'rgba(255,180,120,0.18)');
-    halo.addColorStop(1, 'rgba(255,180,120,0)');
-    ctx.fillStyle = halo;
-    ctx.fillRect(sunX - 240, sunY - 240, 480, 480);
-    ctx.fillStyle = '#fff4d8';
-    ctx.beginPath(); ctx.arc(sunX, sunY, 46, 0, 6.283); ctx.fill();
+    // güneş gündüz, ay gece — aynı yay üzerinde zıt konumda
+    const arcW = W * 0.46, arcH = baseLevel * 0.55;
+    const sunX = W * 0.5 - Math.cos(theta) * arcW;
+    const sunY = baseLevel * 0.5 - elevation * arcH;
+    const moonTheta = theta + Math.PI;
+    const moonElevation = Math.sin(moonTheta);
+    const moonX = W * 0.5 - Math.cos(moonTheta) * arcW;
+    const moonY = baseLevel * 0.5 - moonElevation * arcH;
 
-    return { sunX, sunY };
+    if (elevation > -0.06) {
+      const haloColor = warm > 0.2 ? `rgba(255,170,110,${0.6})` : 'rgba(255,236,190,0.95)';
+      const halo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 220);
+      halo.addColorStop(0, haloColor);
+      halo.addColorStop(0.18, 'rgba(255,210,150,0.55)');
+      halo.addColorStop(0.5, 'rgba(255,180,120,0.16)');
+      halo.addColorStop(1, 'rgba(255,180,120,0)');
+      ctx.globalAlpha = Math.min(1, (elevation + 0.06) * 4);
+      ctx.fillStyle = halo;
+      ctx.fillRect(sunX - 240, sunY - 240, 480, 480);
+      ctx.fillStyle = warm > 0.2 ? '#ffd9a8' : '#fff4d8';
+      ctx.beginPath(); ctx.arc(sunX, sunY, 46, 0, 6.283); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    if (moonElevation > -0.06) {
+      ctx.globalAlpha = Math.min(1, (moonElevation + 0.06) * 4);
+      const mhalo = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 130);
+      mhalo.addColorStop(0, 'rgba(220,230,255,0.55)');
+      mhalo.addColorStop(0.5, 'rgba(180,200,255,0.12)');
+      mhalo.addColorStop(1, 'rgba(180,200,255,0)');
+      ctx.fillStyle = mhalo;
+      ctx.fillRect(moonX - 140, moonY - 140, 280, 280);
+      ctx.fillStyle = '#eef2ff';
+      ctx.beginPath(); ctx.arc(moonX, moonY, 28, 0, 6.283); ctx.fill();
+      ctx.fillStyle = 'rgba(180,195,225,0.5)';
+      ctx.beginPath(); ctx.arc(moonX - 9, moonY - 6, 5, 0, 6.283); ctx.fill();
+      ctx.beginPath(); ctx.arc(moonX + 7, moonY + 8, 3.5, 0, 6.283); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    return { sunX: elevation >= moonElevation ? sunX : moonX, sunY: elevation >= moonElevation ? sunY : moonY };
   }
 
   // ---------- Çizim: Su ----------
@@ -1310,6 +1397,11 @@
     acidRaining = !acidRaining;
     acidRainBtn.classList.toggle('on', acidRaining);
   });
+  const dayNightBtn = document.getElementById('dayNight');
+  dayNightBtn.addEventListener('click', () => {
+    dayNightOn = !dayNightOn;
+    dayNightBtn.classList.toggle('on', dayNightOn);
+  });
 
   // ---------- Ana döngü ----------
   let timeNow = 0, last = performance.now(), fpsAcc = 0, fpsCount = 0;
@@ -1321,6 +1413,7 @@
     timeNow += dt * 0.016;
 
     // güncelle (sabit alt-adımlar ile kararlılık)
+    if (dayNightOn) cycleT = (cycleT + dt * 0.016 / CYCLE_DURATION) % 1;
     updateTsunami(dt);
     updateWater();
     updateShip(dt);
