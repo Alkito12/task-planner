@@ -189,6 +189,70 @@
   }
   .bc-move:active, .bc-fire:active { filter: brightness(1.25); transform: scale(0.92); }
 
+  /* ---------- Kraken boss modu ---------- */
+  .kraken-btn {
+    position: fixed; top: calc(50% - 118px); right: max(14px, env(safe-area-inset-right)); transform: translateY(-50%);
+    z-index: 12; width: 92px; height: 92px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #d8b4fe, #7c3aed 55%, #3b0764);
+    border: 3px solid rgba(216, 180, 254, 0.8);
+    box-shadow: 0 0 22px rgba(124, 58, 237, 0.75), 0 6px 18px rgba(0,0,0,0.5);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    cursor: pointer; color: #f5f0ff; transition: transform .12s, filter .15s;
+  }
+  .kraken-btn:hover { filter: brightness(1.15); }
+  .kraken-btn:active { transform: translateY(-50%) scale(0.93); }
+  .kraken-btn .squid { font-size: 2.1rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
+  .kraken-btn .kraken-label { font-size: 0.72rem; font-weight: 800; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+
+  body.battle-mode .kraken-btn, body.kraken-mode .war-btn, body.kraken-mode .kraken-btn { display: none; }
+  body.kraken-mode .hud, body.kraken-mode .panel { display: none; }
+
+  .cannon-tab {
+    display: none; position: fixed; top: max(70px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    z-index: 15; gap: 10px; background: rgba(8, 14, 30, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(216,180,254,0.3); border-radius: 14px; padding: 10px 14px;
+  }
+  body.kraken-mode .cannon-tab { display: flex; }
+  .cannon-opt {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: rgba(124,58,237,0.18); border: 1.5px solid rgba(216,180,254,0.3); border-radius: 10px;
+    padding: 6px 10px; cursor: pointer; color: #f5f0ff; transition: filter .12s, border-color .12s, transform .1s;
+  }
+  .cannon-opt .ic { font-size: 1.3rem; }
+  .cannon-opt .lb { font-size: 0.58rem; font-weight: 700; }
+  .cannon-opt:hover { filter: brightness(1.2); }
+  .cannon-opt.selected { border-color: #f5f0ff; background: rgba(124,58,237,0.45); }
+  .cannon-opt:active { transform: scale(0.93); }
+
+  .kraken-hud {
+    display: none; position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    z-index: 15; gap: 28px; align-items: center;
+    background: rgba(8, 14, 30, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(216,180,254,0.25); border-radius: 14px; padding: 10px 18px;
+  }
+  body.kraken-mode .kraken-hud { display: flex; }
+  .kraken-hud .hp-bar.boss .hp-fill { background: linear-gradient(90deg,#c084fc,#7c3aed); }
+
+  .kraken-fire-btn {
+    display: none; position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 16; width: 78px; height: 78px; border-radius: 50%; border: none; cursor: pointer;
+    color: #fff1f1; font-size: 1.9rem; font-weight: 800; user-select: none; touch-action: none;
+    background: radial-gradient(circle at 35% 30%, #fca5a5, #dc2626 55%, #7f1d1d);
+    box-shadow: 0 0 18px rgba(220,38,38,0.6), 0 4px 14px rgba(0,0,0,0.45);
+    transition: filter .1s, transform .1s;
+  }
+  body.kraken-mode .kraken-fire-btn { display: flex; align-items: center; justify-content: center; }
+  .kraken-fire-btn:active { filter: brightness(1.25); transform: scale(0.92); }
+
+  .kraken-result {
+    position: fixed; inset: 0; z-index: 130;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: rgba(2,6,20,0.85); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .kraken-result.hidden { display: none; }
+  .kraken-result h2 { font-size: 1.8rem; font-weight: 800; color: #f5f0ff; }
+  .kraken-result-btns { display: flex; gap: 14px; }
+
   /* Telefon / küçük ekran: panel kaydırılabilir tek satır, HUD daraltılabilir */
   @media (max-width: 640px), (max-height: 480px) {
     .hud { max-width: 70vw; padding: 10px 12px; }
@@ -290,6 +354,33 @@
 <button class="mute-dot" id="muteToggle" title="Ses aç/kapat" aria-label="Ses aç/kapat"></button>
 
 <button class="war-btn" id="warBtn"><span class="skull">💀</span><span class="war-label">SAVAŞ</span></button>
+<button class="kraken-btn" id="krakenBtn"><span class="squid">🦑</span><span class="kraken-label">KRAKEN</span></button>
+
+<div class="cannon-tab" id="cannonTab"></div>
+
+<div class="kraken-hud" id="krakenHud">
+  <div class="hp-bar player">
+    <span class="hp-label">GEMİ</span>
+    <div class="hp-track"><div class="hp-fill" id="krakenShipHpFill"></div></div>
+    <span class="hp-text" id="krakenShipHpText">2000</span>
+  </div>
+  <div class="hp-bar boss">
+    <span class="hp-label">KRAKEN</span>
+    <div class="hp-track"><div class="hp-fill" id="krakenBossHpFill"></div></div>
+    <span class="hp-text" id="krakenBossHpText">5000</span>
+  </div>
+  <button class="battle-quit-btn" id="krakenQuit" title="Savaştan çık" aria-label="Savaştan çık">✕</button>
+</div>
+
+<button class="kraken-fire-btn" id="krakenFireBtn" aria-label="Ateş">💥</button>
+
+<div class="kraken-result hidden" id="krakenResult">
+  <h2 id="krakenResultTitle"></h2>
+  <div class="kraken-result-btns">
+    <button class="btn" id="krakenRetry">↺ Tekrar Oyna</button>
+    <button class="btn alt" id="krakenExit">⚓ Sandbox'a Dön</button>
+  </div>
+</div>
 
 <div class="ship-select-menu hidden" id="shipSelectMenu">
   <h2>⚔️ Tekne Seç</h2>
@@ -2059,11 +2150,20 @@
   document.getElementById('battleRetry').addEventListener('click', () => { startBattle(battle.shipDef); });
   document.getElementById('battleExit').addEventListener('click', exitBattle);
   document.getElementById('battleQuit').addEventListener('click', exitBattle);
+  document.getElementById('krakenBtn').addEventListener('click', () => { if (!battle.active) startKrakenBattle(); });
+  document.getElementById('krakenQuit').addEventListener('click', exitKrakenBattle);
+  document.getElementById('krakenExit').addEventListener('click', exitKrakenBattle);
+  document.getElementById('krakenRetry').addEventListener('click', startKrakenBattle);
+  document.getElementById('krakenFireBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); fireKrakenCannon(); });
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyA' || e.code === 'ArrowLeft') battle.keys.a = true;
     if (e.code === 'KeyD' || e.code === 'ArrowRight') battle.keys.d = true;
-    if (e.code === 'Space') { fireBattlePlayerCannon(); if (battle.active) e.preventDefault(); }
+    if (e.code === 'Space') {
+      fireBattlePlayerCannon();
+      fireKrakenCannon();
+      if (battle.active || krakenBoss.active) e.preventDefault();
+    }
   });
   window.addEventListener('keyup', (e) => {
     if (e.code === 'KeyA' || e.code === 'ArrowLeft') battle.keys.a = false;
@@ -2083,6 +2183,358 @@
   bindHoldButton(document.getElementById('bcRight'), () => { battle.keys.d = true; }, () => { battle.keys.d = false; });
   document.getElementById('bcFire').addEventListener('pointerdown', (e) => { e.preventDefault(); fireBattlePlayerCannon(); });
 
+  // ---------- Kraken Boss Modu ----------
+  const CANNON_TYPES = [
+    { id: 'plasma', label: 'Plasma', icon: '🟣', dmg: 250, color: '#c084fc' },
+    { id: 'flame', label: 'Alevli', icon: '🔥', dmg: 200, color: '#ef4444', dotPerTick: 5, dotTicks: 5, dotColor: '#fb923c' },
+    { id: 'ice', label: 'Buz', icon: '❄️', dmg: 220, color: '#7dd3fc', freeze: 2 },
+    { id: 'normal', label: 'Normal', icon: '⚫', dmg: 230, color: '#e5e7eb' },
+    { id: 'spark', label: 'Kıvılcım', icon: '⚡', dmg: 225, color: '#facc15', sparkDmg: 15, sparkColor: '#fde047' },
+  ];
+
+  const krakenBoss = {
+    active: false, result: null, frozen: false,
+    x: 0, y: 0, t: 0,
+    hp: 5000, maxHp: 5000,
+    shipHp: 2000, maxShipHp: 2000,
+    phase: 'idle', phaseT: 0, attackTimer: 7,
+    freezeT: 0,
+    grabArmIdx: 0,
+    arms: [], dots: [],
+    cannon: 'normal',
+    cooldown: 0,
+    cannonballs: [],
+    floatingTexts: [],
+  };
+
+  const cannonTabEl = document.getElementById('cannonTab');
+  const krakenHud = document.getElementById('krakenHud');
+  const krakenShipHpFill = document.getElementById('krakenShipHpFill');
+  const krakenBossHpFill = document.getElementById('krakenBossHpFill');
+  const krakenShipHpText = document.getElementById('krakenShipHpText');
+  const krakenBossHpText = document.getElementById('krakenBossHpText');
+  const krakenResult = document.getElementById('krakenResult');
+  const krakenResultTitle = document.getElementById('krakenResultTitle');
+
+  CANNON_TYPES.forEach((c) => {
+    const opt = document.createElement('div');
+    opt.className = 'cannon-opt' + (c.id === krakenBoss.cannon ? ' selected' : '');
+    opt.dataset.id = c.id;
+    opt.innerHTML = `<span class="ic">${c.icon}</span><span class="lb">${c.label}</span>`;
+    opt.addEventListener('click', () => {
+      krakenBoss.cannon = c.id;
+      cannonTabEl.querySelectorAll('.cannon-opt').forEach((el) => el.classList.toggle('selected', el.dataset.id === c.id));
+    });
+    cannonTabEl.appendChild(opt);
+  });
+
+  function getCannonDef() { return CANNON_TYPES.find((c) => c.id === krakenBoss.cannon) || CANNON_TYPES[3]; }
+
+  function updateKrakenHpUI() {
+    const sp = Math.max(0, krakenBoss.shipHp / krakenBoss.maxShipHp * 100);
+    const bp = Math.max(0, krakenBoss.hp / krakenBoss.maxHp * 100);
+    krakenShipHpFill.style.width = sp + '%';
+    krakenBossHpFill.style.width = bp + '%';
+    krakenShipHpText.textContent = Math.round(Math.max(0, krakenBoss.shipHp));
+    krakenBossHpText.textContent = Math.round(Math.max(0, krakenBoss.hp));
+  }
+
+  function startKrakenBattle() {
+    ensureAudio();
+    if (battle.active) return;
+    krakenBoss.hp = krakenBoss.maxHp;
+    krakenBoss.shipHp = krakenBoss.maxShipHp;
+    krakenBoss.x = W * 0.78; krakenBoss.y = baseLevel - 10;
+    krakenBoss.t = 0;
+    krakenBoss.phase = 'idle'; krakenBoss.phaseT = 0; krakenBoss.attackTimer = 7;
+    krakenBoss.freezeT = 0;
+    krakenBoss.cooldown = 0;
+    krakenBoss.cannonballs.length = 0;
+    krakenBoss.floatingTexts.length = 0;
+    krakenBoss.dots.length = 0;
+    krakenBoss.result = null;
+    krakenBoss.frozen = false;
+    krakenBoss.arms = [];
+    const n = 20;
+    for (let i = 0; i < n; i++) {
+      krakenBoss.arms.push({
+        baseAngle: (i / n) * 6.283,
+        len: 130 + Math.random() * 90,
+        phase: Math.random() * 6.283,
+        speed: 0.8 + Math.random() * 1.0,
+        sway: 10 + Math.random() * 14,
+      });
+    }
+    krakenBoss.grabArmIdx = Math.floor(Math.random() * n);
+    krakenBoss.active = true;
+    resetShip();
+    ship.x = W * 0.28; ship.y = baseLevel - 40;
+    document.body.classList.add('kraken-mode');
+    krakenHud.classList.remove('hidden');
+    krakenResult.classList.add('hidden');
+    updateKrakenHpUI();
+  }
+
+  function endKrakenBattle(result) {
+    krakenBoss.result = result;
+    krakenBoss.frozen = true;
+    if (result === 'win') { playReset(); } else { playWreck(); }
+    krakenResultTitle.textContent = result === 'win' ? '🏆 Krakeni Yendin!' : '💀 Gemin Battı!';
+    krakenResult.classList.remove('hidden');
+  }
+
+  function exitKrakenBattle() {
+    krakenBoss.active = false;
+    krakenBoss.frozen = false;
+    krakenBoss.phase = 'idle';
+    document.body.classList.remove('kraken-mode');
+    krakenHud.classList.add('hidden');
+    krakenResult.classList.add('hidden');
+    resetShip();
+  }
+
+  function spawnFloatText(x, y, text, color, big) {
+    krakenBoss.floatingTexts.push({
+      x, y, text, color,
+      vx: (Math.random() - 0.5) * 0.6, vy: -0.9 - Math.random() * 0.5,
+      life: 1, big: !!big,
+    });
+  }
+
+  function krakenHeadPos() { return { x: krakenBoss.x, y: krakenBoss.y }; }
+
+  function applyKrakenDamage(amount, color, big) {
+    krakenBoss.hp -= amount;
+    const head = krakenHeadPos();
+    const fx = head.x + (Math.random() - 0.5) * 70;
+    const fy = head.y - 30 - Math.random() * 50;
+    spawnFloatText(fx, fy, '-' + Math.round(amount), color, big);
+    updateKrakenHpUI();
+    if (krakenBoss.hp <= 0 && !krakenBoss.frozen) endKrakenBattle('win');
+  }
+
+  function spawnShipBiteDamage() {
+    const woods = ['#c98a4b', '#8a5a30', '#6e4423', '#a06a38'];
+    for (let i = 0; i < 3; i++) {
+      debris.push({
+        x: ship.x + (Math.random() - 0.5) * ship.w * 0.6,
+        y: ship.y + (Math.random() - 0.5) * ship.h * 0.6,
+        vx: (Math.random() - 0.5) * 5, vy: -2 - Math.random() * 4,
+        w: 10 + Math.random() * 18, h: 4 + Math.random() * 5,
+        angle: Math.random() * 6.28, vAngle: (Math.random() - 0.5) * 0.25,
+        color: woods[i % woods.length], type: 'plank', buoyant: true,
+      });
+    }
+    spawnImpactFlash(ship.x, ship.y, 0.8, '#dc2626');
+  }
+
+  function fireKrakenCannon() {
+    if (!krakenBoss.active || krakenBoss.frozen || krakenBoss.cooldown > 0) return;
+    krakenBoss.cooldown = 28;
+    const cdef = getCannonDef();
+    const head = krakenHeadPos();
+    const dy = (head.y - ship.y) / Math.max(1, Math.abs(head.x - ship.x) / 14);
+    krakenBoss.cannonballs.push({ x: ship.x, y: ship.y - 16, vx: 14, vy: dy, cdef });
+    playCannon();
+  }
+
+  function resolveCannonHit(cdef) {
+    applyKrakenDamage(cdef.dmg, cdef.color, true);
+    if (cdef.freeze) krakenBoss.freezeT = Math.max(krakenBoss.freezeT, cdef.freeze);
+    if (cdef.sparkDmg) applyKrakenDamage(cdef.sparkDmg, cdef.sparkColor, false);
+    if (cdef.dotPerTick) {
+      krakenBoss.dots.push({ ticksLeft: cdef.dotTicks, tickT: 1, dmg: cdef.dotPerTick, color: cdef.dotColor });
+    }
+  }
+
+  function updateKrakenBoss(dt) {
+    if (!krakenBoss.active || krakenBoss.frozen) return;
+    krakenBoss.t += dt * 0.016;
+    if (krakenBoss.cooldown > 0) krakenBoss.cooldown -= dt;
+
+    for (let i = krakenBoss.floatingTexts.length - 1; i >= 0; i--) {
+      const ft = krakenBoss.floatingTexts[i];
+      ft.x += ft.vx * dt; ft.y += ft.vy * dt; ft.life -= dt * 0.012;
+      if (ft.life <= 0) krakenBoss.floatingTexts.splice(i, 1);
+    }
+
+    for (let i = krakenBoss.dots.length - 1; i >= 0; i--) {
+      const d = krakenBoss.dots[i];
+      d.tickT -= dt * 0.016;
+      if (d.tickT <= 0) {
+        d.tickT += 1;
+        d.ticksLeft--;
+        if (krakenBoss.hp > 0) applyKrakenDamage(d.dmg, d.color, false);
+      }
+      if (d.ticksLeft <= 0) krakenBoss.dots.splice(i, 1);
+    }
+
+    for (let i = krakenBoss.cannonballs.length - 1; i >= 0; i--) {
+      const b = krakenBoss.cannonballs[i];
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      const head = krakenHeadPos();
+      const dx = b.x - head.x, dy = b.y - head.y;
+      if (Math.sqrt(dx * dx + dy * dy) < 75) {
+        resolveCannonHit(b.cdef);
+        spawnImpactFlash(b.x, b.y, 1, b.cdef.color);
+        krakenBoss.cannonballs.splice(i, 1);
+        continue;
+      }
+      if (b.x > W + 40 || b.x < -40) krakenBoss.cannonballs.splice(i, 1);
+    }
+
+    if (krakenBoss.result) return;
+
+    if (krakenBoss.freezeT > 0) { krakenBoss.freezeT -= dt * 0.016; return; }
+
+    if (krakenBoss.phase === 'idle') {
+      krakenBoss.attackTimer -= dt * 0.016;
+      if (krakenBoss.attackTimer <= 0 && ship.state === 'float') {
+        krakenBoss.phase = 'reach'; krakenBoss.phaseT = 0;
+        krakenBoss.grabArmIdx = Math.floor(Math.random() * krakenBoss.arms.length);
+        splashAt(ship.x, -10, 5);
+      }
+    } else if (krakenBoss.phase === 'reach') {
+      krakenBoss.phaseT += dt * 0.016;
+      if (krakenBoss.phaseT >= 1) {
+        krakenBoss.phase = 'grab'; krakenBoss.phaseT = 0;
+        ship.state = 'grabbed'; ship.held = false;
+        canvas.classList.remove('dragging');
+        playKraken();
+      }
+    } else if (krakenBoss.phase === 'grab') {
+      krakenBoss.phaseT += dt * 0.016;
+      const head = krakenHeadPos();
+      const tx = head.x - 70, ty = head.y;
+      ship.x += (tx - ship.x) * 0.06;
+      ship.y += (ty - ship.y) * 0.06;
+      ship.vx = 0; ship.vy = 0;
+      ship.angle = Math.sin(krakenBoss.phaseT * 6) * 0.25;
+      if (Math.random() < 0.6) spawnBubble(ship.x + (Math.random() - 0.5) * ship.w, ship.y + (Math.random() - 0.5) * ship.h);
+      if (krakenBoss.phaseT >= 1.4) {
+        krakenBoss.phase = 'bite'; krakenBoss.phaseT = 0;
+        krakenBoss.shipHp -= 350;
+        spawnShipBiteDamage();
+        spawnFloatText(ship.x, ship.y - 40, '-350', '#ef4444', true);
+        updateKrakenHpUI();
+        playWreck();
+        if (krakenBoss.shipHp <= 0) endKrakenBattle('lose');
+      }
+    } else if (krakenBoss.phase === 'bite') {
+      krakenBoss.phaseT += dt * 0.016;
+      if (krakenBoss.phaseT >= 0.5) { krakenBoss.phase = 'release'; krakenBoss.phaseT = 0; }
+    } else if (krakenBoss.phase === 'release') {
+      krakenBoss.phaseT += dt * 0.016;
+      if (krakenBoss.phaseT >= 0.8) {
+        ship.state = 'float';
+        ship.vx = 0; ship.vy = 0;
+        krakenBoss.phase = 'idle'; krakenBoss.phaseT = 0; krakenBoss.attackTimer = 7;
+      }
+    }
+  }
+
+  function drawKrakenBossEntity() {
+    if (!krakenBoss.active) return;
+    const head = krakenHeadPos();
+    const isFrozen = krakenBoss.freezeT > 0;
+
+    krakenBoss.arms.forEach((a, idx) => {
+      let tipX, tipY, reach;
+      const isGrabArm = idx === krakenBoss.grabArmIdx &&
+        (krakenBoss.phase === 'reach' || krakenBoss.phase === 'grab' || krakenBoss.phase === 'bite' || krakenBoss.phase === 'release');
+      if (isGrabArm) {
+        if (krakenBoss.phase === 'reach') reach = Math.min(1, krakenBoss.phaseT / 1);
+        else if (krakenBoss.phase === 'release') reach = Math.max(0, 1 - krakenBoss.phaseT / 0.8);
+        else reach = 1;
+        tipX = ship.x; tipY = ship.y;
+      } else {
+        reach = 0.82 + 0.12 * Math.sin(krakenBoss.t * a.speed + a.phase);
+        const ang = a.baseAngle + Math.sin(krakenBoss.t * 0.3 + a.phase) * 0.2;
+        tipX = head.x + Math.cos(ang) * a.len;
+        tipY = head.y + Math.abs(Math.sin(ang)) * a.len * 0.5 + 45;
+      }
+      const ax = head.x + Math.cos(a.baseAngle) * 20;
+      const ay = head.y + Math.sin(a.baseAngle) * 20 + 10;
+      const segs = 10;
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.beginPath();
+        for (let s = 0; s <= segs; s++) {
+          const f = s / segs;
+          const swayAmt = Math.sin(krakenBoss.t * a.speed + a.phase + f * 4) * a.sway * Math.sin(f * Math.PI) * (isGrabArm ? 0.4 : 1);
+          const x = ax + (tipX - ax) * f * reach + swayAmt;
+          const y = ay + (tipY - ay) * f * reach;
+          if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = pass === 0 ? (isFrozen ? '#1e3a5f' : '#3b1d52') : (isFrozen ? '#7dd3fc' : '#7c3aed');
+        ctx.lineCap = 'round';
+        ctx.lineWidth = (pass === 0 ? 16 : 10) * (0.5 + 0.5 * reach);
+        ctx.stroke();
+      }
+      ctx.fillStyle = isFrozen ? '#bae6fd' : '#c4b5fd';
+      for (let s = 2; s <= segs; s += 2) {
+        const f = s / segs;
+        const swayAmt = Math.sin(krakenBoss.t * a.speed + a.phase + f * 4) * a.sway * Math.sin(f * Math.PI) * (isGrabArm ? 0.4 : 1);
+        const x = ax + (tipX - ax) * f * reach + swayAmt;
+        const y = ay + (tipY - ay) * f * reach;
+        ctx.beginPath(); ctx.arc(x, y, 2.2 * (0.5 + 0.5 * reach), 0, 6.283); ctx.fill();
+      }
+    });
+
+    const bodyG = ctx.createRadialGradient(head.x, head.y, 10, head.x, head.y, 120);
+    bodyG.addColorStop(0, isFrozen ? '#7dd3fc' : '#6d28d9');
+    bodyG.addColorStop(1, isFrozen ? '#1e3a5f' : '#2a1340');
+    ctx.fillStyle = bodyG;
+    ctx.beginPath(); ctx.ellipse(head.x, head.y, 95, 110, 0, 0, 6.283); ctx.fill();
+
+    ctx.fillStyle = '#fde047';
+    ctx.beginPath(); ctx.ellipse(head.x - 10, head.y - 30, 26, 30, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(head.x - 10, head.y - 30, 11, 16, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(head.x - 14, head.y - 38, 3.5, 0, 6.283); ctx.fill();
+
+    const mouthOpen = krakenBoss.phase === 'bite' ? 1 : (krakenBoss.phase === 'grab' ? 0.5 : 0.15);
+    ctx.fillStyle = '#2a0a0a';
+    ctx.beginPath();
+    ctx.ellipse(head.x + 10, head.y + 45, 40, 18 + 22 * mouthOpen, 0, 0, 6.283);
+    ctx.fill();
+    ctx.strokeStyle = '#f1f5f9'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = -3; i <= 3; i++) {
+      ctx.moveTo(head.x + 10 + i * 11, head.y + 45 - (18 + 22 * mouthOpen));
+      ctx.lineTo(head.x + 10 + i * 11, head.y + 45 - (18 + 22 * mouthOpen) + 10);
+    }
+    ctx.stroke();
+
+    if (isFrozen) {
+      ctx.fillStyle = 'rgba(125, 211, 252, 0.35)';
+      ctx.beginPath(); ctx.ellipse(head.x, head.y, 110, 130, 0, 0, 6.283); ctx.fill();
+    }
+  }
+
+  function drawKrakenCannonballs() {
+    ctx.fillStyle = '#1f2937';
+    for (const b of krakenBoss.cannonballs) {
+      ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = b.cdef.color; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
+  function drawKrakenFloatingTexts() {
+    for (const ft of krakenBoss.floatingTexts) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, ft.life);
+      ctx.font = (ft.big ? 'bold 26px' : 'bold 18px') + ' system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.strokeText(ft.text, ft.x, ft.y);
+      ctx.fillStyle = ft.color;
+      ctx.fillText(ft.text, ft.x, ft.y);
+      ctx.restore();
+    }
+  }
+
   // ---------- Girdi (mouse + dokunmatik) ----------
   // pointer.active: dokunuş canvas üzerinde başladıysa true — panel/slider dokunuşlarını
   // engellemeyiz, sadece gemi/su etkileşimini takip ederiz.
@@ -2092,7 +2544,7 @@
     return { x: t.clientX, y: t.clientY };
   }
   function onDown(e) {
-    if (battle.active) return;
+    if (battle.active || krakenBoss.active) return;
     const p = getPos(e);
     pointer.x = p.x; pointer.y = p.y; pointer.down = true; pointer.active = true;
     if (ship.state === 'float' && pointInShip(p.x, p.y)) {
@@ -2208,6 +2660,7 @@
       updateShip(dt);
       updateBalls(dt);
       updateKraken(dt);
+      updateKrakenBoss(dt);
       updateDebris(dt);
       updateBubbles(dt);
       updateRain();
@@ -2225,13 +2678,16 @@
       drawFlashes(timeNow);
       drawBubbles();
       drawKraken();
+      drawKrakenBossEntity();
       drawShip();
       drawDebris();
+      drawKrakenCannonballs();
       drawBalls();
       drawParticles();
       drawRain();
       drawAcidRain();
       drawLightning();
+      drawKrakenFloatingTexts();
     }
 
     // fps
