@@ -2200,7 +2200,7 @@
     x: 0, y: 0, t: 0,
     hp: 5000, maxHp: 5000,
     shipHp: 2000, maxShipHp: 2000,
-    phase: 'idle', phaseT: 0, attackTimer: 7,
+    phase: 'idle', phaseT: 0, attackTimer: 4.5,
     freezeT: 0,
     grabArmIdx: 0,
     arms: [], dots: [],
@@ -2249,7 +2249,7 @@
     krakenBoss.shipHp = krakenBoss.maxShipHp;
     krakenBoss.x = W * 0.78; krakenBoss.y = baseLevel - 10;
     krakenBoss.t = 0;
-    krakenBoss.phase = 'idle'; krakenBoss.phaseT = 0; krakenBoss.attackTimer = 7;
+    krakenBoss.phase = 'idle'; krakenBoss.phaseT = 0; krakenBoss.attackTimer = 4.5;
     krakenBoss.freezeT = 0;
     krakenBoss.cooldown = 0;
     krakenBoss.cannonballs.length = 0;
@@ -2442,7 +2442,7 @@
       if (krakenBoss.phaseT >= 0.8) {
         ship.state = 'float';
         ship.vx = 0; ship.vy = 0;
-        krakenBoss.phase = 'idle'; krakenBoss.phaseT = 0; krakenBoss.attackTimer = 7;
+        krakenBoss.phase = 'idle'; krakenBoss.phaseT = 0; krakenBoss.attackTimer = 4.5;
       }
     }
   }
