@@ -206,6 +206,8 @@
 
   body.battle-mode .kraken-btn, body.kraken-mode .war-btn, body.kraken-mode .kraken-btn { display: none; }
   body.kraken-mode .hud, body.kraken-mode .panel { display: none; }
+  body.kraken-mode .battle-controls { display: flex; }
+  body.kraken-mode #bcFire { display: none; }
 
   .cannon-tab {
     display: none; position: fixed; top: max(70px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
@@ -2347,10 +2349,21 @@
     }
   }
 
+  const KRAKEN_SHIP_SPEED = 3.2;
   function updateKrakenBoss(dt) {
     if (!krakenBoss.active || krakenBoss.frozen) return;
     krakenBoss.t += dt * 0.016;
     if (krakenBoss.cooldown > 0) krakenBoss.cooldown -= dt;
+
+    if (ship.state === 'float') {
+      let vx = 0;
+      if (battle.keys.d) vx += KRAKEN_SHIP_SPEED;
+      if (battle.keys.a) vx -= KRAKEN_SHIP_SPEED;
+      if (vx !== 0) {
+        const margin = ship.w * 0.5;
+        ship.x = Math.max(margin, Math.min(W - margin, ship.x + vx * dt * 1.1));
+      }
+    }
 
     for (let i = krakenBoss.floatingTexts.length - 1; i >= 0; i--) {
       const ft = krakenBoss.floatingTexts[i];
