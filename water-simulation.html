@@ -2289,6 +2289,9 @@
   function endKrakenBattle(result) {
     krakenBoss.result = result;
     krakenBoss.frozen = true;
+    krakenBoss.floatingTexts.length = 0;
+    krakenBoss.dots.length = 0;
+    krakenBoss.cannonballs.length = 0;
     if (result === 'win') { playReset(); } else { playWreck(); }
     krakenResultTitle.textContent = result === 'win' ? '🏆 Krakeni Yendin!' : '💀 Gemin Battı!';
     krakenResult.classList.remove('hidden');
@@ -2298,6 +2301,9 @@
     krakenBoss.active = false;
     krakenBoss.frozen = false;
     krakenBoss.phase = 'idle';
+    krakenBoss.floatingTexts.length = 0;
+    krakenBoss.dots.length = 0;
+    krakenBoss.cannonballs.length = 0;
     document.body.classList.remove('kraken-mode');
     krakenHud.classList.add('hidden');
     krakenResult.classList.add('hidden');
