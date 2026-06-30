@@ -2405,7 +2405,7 @@
   }
 
   function fireKrakenCannon() {
-    if (!krakenBoss.active || krakenBoss.frozen || krakenBoss.cooldown > 0) return;
+    if (!krakenBoss.active || krakenBoss.frozen || krakenBoss.cooldown > 0 || ship.state === 'grabbed') return;
     krakenBoss.cooldown = 28;
     const cdef = getCannonDef();
     const head = krakenHeadPos();
