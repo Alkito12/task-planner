@@ -2209,7 +2209,7 @@
     hp: 5000, maxHp: 5000,
     shipHp: 2000, maxShipHp: 2000,
     phase: 'idle', phaseT: 0, attackTimer: 4.5,
-    freezeT: 0,
+    freezeT: 0, freezeImmuneT: 0,
     grabArmIdx: 0,
     arms: [], dots: [],
     cannon: 'normal',
@@ -2259,6 +2259,7 @@
     krakenBoss.t = 0;
     krakenBoss.phase = 'idle'; krakenBoss.phaseT = 0; krakenBoss.attackTimer = 4.5;
     krakenBoss.freezeT = 0;
+    krakenBoss.freezeImmuneT = 0;
     krakenBoss.cooldown = 0;
     krakenBoss.cannonballs.length = 0;
     krakenBoss.floatingTexts.length = 0;
@@ -2357,7 +2358,7 @@
 
   function resolveCannonHit(cdef) {
     applyKrakenDamage(cdef.dmg, cdef.color, true);
-    if (cdef.freeze) krakenBoss.freezeT = Math.max(krakenBoss.freezeT, cdef.freeze);
+    if (cdef.freeze && krakenBoss.freezeT <= 0 && krakenBoss.freezeImmuneT <= 0) krakenBoss.freezeT = cdef.freeze;
     if (cdef.sparkDmg) applyKrakenDamage(cdef.sparkDmg, cdef.sparkColor, false);
     if (cdef.dotPerTick) {
       krakenBoss.dots.push({ ticksLeft: cdef.dotTicks, tickT: 1, dmg: cdef.dotPerTick, color: cdef.dotColor });
@@ -2413,7 +2414,13 @@
 
     if (krakenBoss.result) return;
 
-    if (krakenBoss.freezeT > 0) { krakenBoss.freezeT -= dt * 0.016; return; }
+    if (krakenBoss.freezeImmuneT > 0) krakenBoss.freezeImmuneT -= dt * 0.016;
+
+    if (krakenBoss.freezeT > 0) {
+      krakenBoss.freezeT -= dt * 0.016;
+      if (krakenBoss.freezeT <= 0) krakenBoss.freezeImmuneT = 3;
+      return;
+    }
 
     if (krakenBoss.phase === 'idle') {
       krakenBoss.attackTimer -= dt * 0.016;
