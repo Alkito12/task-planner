@@ -1,0 +1,3117 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Su Fiziği Simülasyonu · Gemi</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100vh; height: 100dvh; overflow: hidden; background: #02030a;
+    position: fixed; inset: 0;
+  }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #scene { display: block; width: 100%; height: 100%; cursor: grab; }
+  #scene.dragging { cursor: grabbing; }
+
+  .hud {
+    position: fixed; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left));
+    z-index: 10;
+    background: rgba(8, 14, 30, 0.55);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(120, 170, 255, 0.18);
+    border-radius: 14px; padding: 12px 14px; color: #dbeafe;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+    max-width: min(240px, 62vw);
+    transition: max-height .2s, opacity .2s;
+  }
+  .hud h1 { font-size: 0.92rem; font-weight: 700; letter-spacing: 0.3px;
+    background: linear-gradient(90deg,#7dd3fc,#a78bfa); -webkit-background-clip: text; background-clip: text; color: transparent;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .hud p { font-size: 0.72rem; color: #93a9c8; line-height: 1.45; margin-top: 4px; }
+  .hud .key { color: #7dd3fc; font-weight: 600; }
+  .hud-btns { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .hud-toggle {
+    display: none; background: none; border: none; color: #93a9c8; font-size: 0.95rem;
+    line-height: 1; padding: 2px 4px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .hud-close {
+    background: none; border: none; color: #93a9c8; font-size: 0.85rem;
+    line-height: 1; padding: 2px 4px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: color .12s;
+  }
+  .hud-close:hover { color: #f87171; }
+  .hud.collapsed p { display: none; }
+  .hud.hud-hidden { display: none; }
+
+  .panel {
+    position: fixed; bottom: max(12px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center;
+    background: rgba(8, 14, 30, 0.55);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(120, 170, 255, 0.18);
+    border-radius: 16px; padding: 9px 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+    max-width: 96vw;
+  }
+  .ctl { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 80px; }
+  .ctl label { font-size: 0.6rem; color: #93a9c8; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; }
+  .ctl input[type=range] { width: 80px; accent-color: #38bdf8; cursor: pointer; touch-action: pan-x; height: 28px; }
+  .btn {
+    background: linear-gradient(180deg,#1d4ed8,#1e3a8a); color: #e0f2fe; border: 1px solid rgba(125,211,252,0.3);
+    padding: 10px 12px; border-radius: 11px; font-size: 0.74rem; font-weight: 600; cursor: pointer;
+    transition: transform .08s, filter .15s;
+    min-height: 38px; white-space: nowrap;
+  }
+  .btn:hover { filter: brightness(1.2); }
+  .btn:active { transform: scale(0.93); }
+  .btn.alt { background: linear-gradient(180deg,#0e7490,#155e75); border-color: rgba(94,234,212,0.3); color: #ccfbf1; }
+  .btn.on { background: linear-gradient(180deg,#15803d,#166534); border-color: rgba(134,239,172,0.5); color: #dcfce7; box-shadow: 0 0 14px rgba(74,222,128,0.4); }
+  .fps { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
+    z-index: 10; font-size: 0.66rem; color: #64748b;
+    background: rgba(8,14,30,0.5); padding: 5px 9px; border-radius: 8px; white-space: nowrap; }
+
+  .day-night-dot {
+    position: fixed; top: max(6px, env(safe-area-inset-top)); left: max(6px, env(safe-area-inset-left));
+    z-index: 11; width: 16px; height: 16px; border-radius: 50%;
+    background: transparent; border: 2px solid rgba(190, 210, 255, 0.55);
+    box-shadow: 0 0 6px rgba(0,0,0,0.4);
+    padding: 0; cursor: pointer; transition: background 0.4s, box-shadow 0.4s, border-color 0.4s;
+  }
+  .day-night-dot.on {
+    background: radial-gradient(circle at 35% 30%, #fff4d8, #ffd86b 60%, #f0a93a);
+    border-color: rgba(255, 216, 107, 0.9);
+    box-shadow: 0 0 12px rgba(255, 216, 107, 0.8);
+  }
+
+  .mute-dot {
+    position: fixed; top: max(6px, env(safe-area-inset-top)); left: calc(max(6px, env(safe-area-inset-left)) + 26px);
+    z-index: 11; width: 16px; height: 16px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #a7f3d0, #34d399 60%, #059669);
+    border: 2px solid rgba(167, 243, 208, 0.9);
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.7);
+    padding: 0; cursor: pointer; transition: background 0.3s, box-shadow 0.3s, border-color 0.3s;
+  }
+  .mute-dot.muted {
+    background: transparent;
+    border-color: rgba(190, 210, 255, 0.55);
+    box-shadow: 0 0 6px rgba(0,0,0,0.4);
+  }
+
+  /* ---------- Savaş modu ---------- */
+  .war-btn {
+    position: fixed; top: 50%; right: max(14px, env(safe-area-inset-right)); transform: translateY(-50%);
+    z-index: 12; width: 92px; height: 92px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fca5a5, #dc2626 55%, #7f1d1d);
+    border: 3px solid rgba(254, 202, 202, 0.8);
+    box-shadow: 0 0 22px rgba(220, 38, 38, 0.75), 0 6px 18px rgba(0,0,0,0.5);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    cursor: pointer; color: #fff1f1; transition: transform .12s, filter .15s;
+  }
+  .war-btn:hover { filter: brightness(1.15); }
+  .war-btn:active { transform: translateY(-50%) scale(0.93); }
+  .war-btn .skull { font-size: 2.1rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
+  .war-btn .war-label { font-size: 0.78rem; font-weight: 800; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+
+  .ship-select-menu {
+    position: fixed; inset: 0; z-index: 120;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background: radial-gradient(circle at 50% 35%, rgba(127,29,29,0.55), rgba(2,6,20,0.94) 70%);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    text-align: center; padding: 24px;
+  }
+  .ship-select-menu.hidden { display: none; }
+  .ship-select-menu h2 {
+    font-size: 1.4rem; font-weight: 800; color: #fee2e2; letter-spacing: 0.3px;
+  }
+  .ship-choices { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; max-width: 90vw; }
+  .ship-card {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    background: linear-gradient(180deg, rgba(127,29,29,0.5), rgba(15,23,42,0.7));
+    border: 1.5px solid rgba(252,165,165,0.35); border-radius: 18px;
+    padding: 18px 24px; cursor: pointer; color: #fee2e2;
+    transition: transform .12s, filter .15s, border-color .15s;
+    min-width: 130px;
+  }
+  .ship-card:hover { filter: brightness(1.2); border-color: rgba(252,165,165,0.8); }
+  .ship-card:active { transform: scale(0.95); }
+  .ship-card .swatch { width: 56px; height: 26px; border-radius: 8px; }
+  .ship-card .name { font-size: 0.88rem; font-weight: 700; }
+  .ship-card .stats { font-size: 0.62rem; color: #fbcaca; }
+
+  .battle-hud {
+    position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    z-index: 15; display: flex; gap: 28px; align-items: center;
+    background: rgba(8, 14, 30, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(252,165,165,0.25); border-radius: 14px; padding: 10px 18px;
+  }
+  .battle-hud.hidden { display: none; }
+  .battle-quit-btn {
+    margin-left: 6px; width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(239,68,68,0.25); border: 1px solid rgba(252,165,165,0.5);
+    color: #fee2e2; font-size: 0.8rem; font-weight: 800; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; transition: filter .15s;
+  }
+  .battle-quit-btn:hover { filter: brightness(1.3); }
+  .battle-quit-btn:active { transform: scale(0.9); }
+  .hp-bar { display: flex; align-items: center; gap: 8px; }
+  .hp-bar .hp-label { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.5px; color: #fee2e2; }
+  .hp-track { width: 130px; height: 12px; border-radius: 6px; background: rgba(255,255,255,0.12); overflow: hidden; }
+  .hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg,#4ade80,#22c55e); transition: width .25s; }
+  .hp-bar.enemy .hp-fill { background: linear-gradient(90deg,#f87171,#dc2626); }
+  .hp-text { font-size: 0.68rem; color: #cbd5e1; min-width: 28px; text-align: center; }
+
+  .battle-result {
+    position: fixed; inset: 0; z-index: 130;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: rgba(2,6,20,0.85); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .battle-result.hidden { display: none; }
+  .battle-result h2 { font-size: 1.8rem; font-weight: 800; color: #fee2e2; }
+  .battle-result-btns { display: flex; gap: 14px; }
+
+  body.battle-mode .hud, body.battle-mode .panel, body.battle-mode .war-btn { display: none; }
+
+  .battle-controls {
+    display: none; position: fixed; left: 0; right: 0; bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 16; justify-content: center; align-items: center; gap: 22px;
+  }
+  body.battle-mode .battle-controls { display: flex; }
+  .bc-move, .bc-fire {
+    border: none; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none;
+    color: #fff1f1; font-weight: 800; transition: filter .1s, transform .1s;
+  }
+  .bc-move {
+    width: 64px; height: 64px; border-radius: 50%; font-size: 1.6rem;
+    background: radial-gradient(circle at 35% 30%, #93c5fd, #2563eb 60%, #1e3a8a);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  }
+  .bc-fire {
+    width: 78px; height: 78px; border-radius: 50%; font-size: 1.9rem;
+    background: radial-gradient(circle at 35% 30%, #fca5a5, #dc2626 55%, #7f1d1d);
+    box-shadow: 0 0 18px rgba(220,38,38,0.6), 0 4px 14px rgba(0,0,0,0.45);
+  }
+  .bc-move:active, .bc-fire:active { filter: brightness(1.25); transform: scale(0.92); }
+
+  /* ---------- Kraken boss modu ---------- */
+  .kraken-btn {
+    position: fixed; top: calc(50% - 118px); right: max(14px, env(safe-area-inset-right)); transform: translateY(-50%);
+    z-index: 12; width: 92px; height: 92px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #d8b4fe, #7c3aed 55%, #3b0764);
+    border: 3px solid rgba(216, 180, 254, 0.8);
+    box-shadow: 0 0 22px rgba(124, 58, 237, 0.75), 0 6px 18px rgba(0,0,0,0.5);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    cursor: pointer; color: #f5f0ff; transition: transform .12s, filter .15s;
+  }
+  .kraken-btn:hover { filter: brightness(1.15); }
+  .kraken-btn:active { transform: translateY(-50%) scale(0.93); }
+  .kraken-btn .squid { font-size: 2.1rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
+  .kraken-btn .kraken-label { font-size: 0.72rem; font-weight: 800; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+
+  body.battle-mode .kraken-btn, body.kraken-mode .war-btn, body.kraken-mode .kraken-btn { display: none; }
+  body.kraken-mode .hud, body.kraken-mode .panel { display: none; }
+  body.kraken-mode .battle-controls { display: flex; pointer-events: none; }
+  body.kraken-mode .battle-controls .bc-move { pointer-events: auto; }
+  body.kraken-mode #bcFire { display: none; }
+
+  .cannon-tab {
+    display: none; position: fixed; top: max(70px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    z-index: 15; gap: 10px; background: rgba(8, 14, 30, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(216,180,254,0.3); border-radius: 14px; padding: 10px 14px;
+  }
+  body.kraken-mode .cannon-tab { display: flex; }
+  .cannon-opt {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: rgba(124,58,237,0.18); border: 1.5px solid rgba(216,180,254,0.3); border-radius: 10px;
+    padding: 6px 10px; cursor: pointer; color: #f5f0ff; transition: filter .12s, border-color .12s, transform .1s;
+  }
+  .cannon-opt .ic { font-size: 1.3rem; }
+  .cannon-opt .lb { font-size: 0.58rem; font-weight: 700; }
+  .cannon-opt:hover { filter: brightness(1.2); }
+  .cannon-opt.selected { border-color: #f5f0ff; background: rgba(124,58,237,0.45); }
+  .cannon-opt:active { transform: scale(0.93); }
+
+  .kraken-hud {
+    display: none; position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    z-index: 15; gap: 28px; align-items: center;
+    background: rgba(8, 14, 30, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(216,180,254,0.25); border-radius: 14px; padding: 10px 18px;
+  }
+  body.kraken-mode .kraken-hud { display: flex; }
+  .kraken-hud .hp-bar.boss .hp-fill { background: linear-gradient(90deg,#c084fc,#7c3aed); }
+
+  .kraken-fire-btn {
+    display: none; position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 16; width: 78px; height: 78px; border-radius: 50%; border: none; cursor: pointer;
+    color: #fff1f1; font-size: 1.9rem; font-weight: 800; user-select: none; touch-action: none;
+    background: radial-gradient(circle at 35% 30%, #fca5a5, #dc2626 55%, #7f1d1d);
+    box-shadow: 0 0 18px rgba(220,38,38,0.6), 0 4px 14px rgba(0,0,0,0.45);
+    transition: filter .1s, transform .1s;
+  }
+  body.kraken-mode .kraken-fire-btn { display: flex; align-items: center; justify-content: center; }
+  .kraken-fire-btn:active { filter: brightness(1.25); transform: scale(0.92); }
+
+  .kraken-result {
+    position: fixed; inset: 0; z-index: 130;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: rgba(2,6,20,0.85); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .kraken-result.hidden { display: none; }
+  .kraken-result h2 { font-size: 1.8rem; font-weight: 800; color: #f5f0ff; }
+  .kraken-result-btns { display: flex; gap: 14px; }
+
+  /* Telefon / küçük ekran: panel kaydırılabilir tek satır, HUD daraltılabilir */
+  @media (max-width: 640px), (max-height: 480px) {
+    .hud { max-width: 70vw; padding: 10px 12px; }
+    .hud h1 { font-size: 0.82rem; }
+    .hud p { font-size: 0.66rem; }
+    .hud-toggle { display: inline-block; }
+
+    .panel {
+      bottom: max(8px, env(safe-area-inset-bottom));
+      max-width: 100vw; width: 100%;
+      left: 0; right: 0; transform: none;
+      border-radius: 0; border-left: none; border-right: none; border-bottom: none;
+      flex-wrap: nowrap; justify-content: flex-start;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      padding: 8px 10px;
+    }
+    .panel::-webkit-scrollbar { display: none; }
+    .ctl { min-width: 64px; flex-shrink: 0; }
+    .ctl input[type=range] { width: 64px; }
+    .btn { flex-shrink: 0; padding: 9px 10px; font-size: 0.68rem; }
+    .fps { font-size: 0.58rem; padding: 4px 7px; }
+  }
+
+  /* ---------- Başlangıç menüsü ---------- */
+  .start-menu {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background: radial-gradient(circle at 50% 35%, rgba(30,58,138,0.55), rgba(2,6,20,0.94) 70%);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    text-align: center; padding: 24px;
+  }
+  .start-menu.hidden { display: none; }
+  .start-menu h2 {
+    font-size: 1.5rem; font-weight: 800; color: #e0f2fe; letter-spacing: 0.3px;
+    background: linear-gradient(90deg,#7dd3fc,#a78bfa); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .start-menu .sub { font-size: 0.85rem; color: #93a9c8; max-width: 320px; margin-top: -10px; }
+  .device-choices { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+  .device-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    background: linear-gradient(180deg, rgba(30,64,175,0.5), rgba(15,23,42,0.7));
+    border: 1.5px solid rgba(125,211,252,0.3); border-radius: 18px;
+    padding: 22px 30px; cursor: pointer; color: #e0f2fe;
+    transition: transform .12s, filter .15s, border-color .15s;
+    min-width: 140px;
+  }
+  .device-btn:hover { filter: brightness(1.2); border-color: rgba(125,211,252,0.7); }
+  .device-btn:active { transform: scale(0.95); }
+  .device-btn .icon { font-size: 2.4rem; }
+  .device-btn .label { font-size: 0.95rem; font-weight: 700; }
+
+  /* ---------- Mobil dikkat uyarısı ---------- */
+  .mobile-warning {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.92);
+    z-index: 110; max-width: 86vw;
+    background: linear-gradient(180deg, rgba(146,64,14,0.92), rgba(67,20,7,0.95));
+    border: 1.5px solid rgba(251,191,36,0.5); border-radius: 18px;
+    padding: 20px 26px; color: #fef3c7; text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    opacity: 0; pointer-events: none; transition: opacity .35s, transform .35s;
+  }
+  .mobile-warning.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .mobile-warning .icon { font-size: 2rem; margin-bottom: 6px; }
+  .mobile-warning p { font-size: 0.95rem; font-weight: 700; line-height: 1.4; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="start-menu" id="startMenu">
+  <h2>⚓ Su Fiziği Simülasyonu</h2>
+  <p class="sub">Oynamak için cihazını seç:</p>
+  <div class="device-choices">
+    <div class="device-btn" id="choosePhone">
+      <span class="icon">📱</span>
+      <span class="label">Telefon</span>
+    </div>
+  </div>
+</div>
+
+<div class="mobile-warning" id="mobileWarning">
+  <div class="icon">⚠️</div>
+  <p>Tüm özelliklerden yararlanmak için<br>yatay şekilde oynayın</p>
+</div>
+
+<div class="hud" id="hud">
+  <h1>⚓ Su Fiziği · Gemi <span class="hud-btns"><button class="hud-toggle" id="hudToggle">▾</button><button class="hud-close" id="hudClose" title="Kapat" aria-label="Kapat">✕</button></span></h1>
+  <p>Gemiye <span class="key">basılı tut</span> ve suda <span class="key">sürükle</span>.
+  Bıraktığında su dalgalanır ve <span class="key">fışkırır</span>. Suya tıklayarak da dalga oluştur.
+  <br>🦑 <span class="key">Kraken</span> gemiyi kapıp dibe çeker ve parçalar. 🧪 <span class="key">Asit Yağmuru</span> gemiyi eritir —
+  her iki durumda da <span class="key">Sıfırla</span> ile onar. Sol üstteki <span class="key">nokta</span> gece/gündüz döngüsünü açıp kapatır.</p>
+</div>
+
+<button class="day-night-dot" id="dayNight" title="Gece/Gündüz döngüsü" aria-label="Gece/Gündüz döngüsü"></button>
+<button class="mute-dot" id="muteToggle" title="Ses aç/kapat" aria-label="Ses aç/kapat"></button>
+
+<button class="war-btn" id="warBtn"><span class="skull">💀</span><span class="war-label">SAVAŞ</span></button>
+<button class="kraken-btn" id="krakenBtn"><span class="squid">🦑</span><span class="kraken-label">KRAKEN</span></button>
+
+<div class="cannon-tab" id="cannonTab"></div>
+
+<div class="kraken-hud" id="krakenHud">
+  <div class="hp-bar player">
+    <span class="hp-label">GEMİ</span>
+    <div class="hp-track"><div class="hp-fill" id="krakenShipHpFill"></div></div>
+    <span class="hp-text" id="krakenShipHpText">2000</span>
+  </div>
+  <div class="hp-bar boss">
+    <span class="hp-label">KRAKEN</span>
+    <div class="hp-track"><div class="hp-fill" id="krakenBossHpFill"></div></div>
+    <span class="hp-text" id="krakenBossHpText">5000</span>
+  </div>
+  <button class="battle-quit-btn" id="krakenQuit" title="Savaştan çık" aria-label="Savaştan çık">✕</button>
+</div>
+
+<button class="kraken-fire-btn" id="krakenFireBtn" aria-label="Ateş">💥</button>
+
+<div class="kraken-result hidden" id="krakenResult">
+  <h2 id="krakenResultTitle"></h2>
+  <div class="kraken-result-btns">
+    <button class="btn" id="krakenRetry">↺ Tekrar Oyna</button>
+    <button class="btn alt" id="krakenExit">⚓ Sandbox'a Dön</button>
+  </div>
+</div>
+
+<div class="ship-select-menu hidden" id="shipSelectMenu">
+  <h2>⚔️ Tekne Seç</h2>
+  <div class="ship-choices" id="shipChoices"></div>
+  <button class="btn" id="cancelShipSelect">Vazgeç</button>
+</div>
+
+<div class="battle-hud hidden" id="battleHud">
+  <div class="hp-bar player">
+    <span class="hp-label">SEN</span>
+    <div class="hp-track"><div class="hp-fill" id="playerHpFill"></div></div>
+    <span class="hp-text" id="playerHpText">100</span>
+  </div>
+  <div class="hp-bar enemy">
+    <span class="hp-label">DÜŞMAN</span>
+    <div class="hp-track"><div class="hp-fill" id="enemyHpFill"></div></div>
+    <span class="hp-text" id="enemyHpText">100</span>
+  </div>
+  <button class="battle-quit-btn" id="battleQuit" title="Savaştan çık" aria-label="Savaştan çık">✕</button>
+</div>
+
+<div class="battle-controls" id="battleControls">
+  <button class="bc-move" id="bcLeft" aria-label="Sola">◀</button>
+  <button class="bc-fire" id="bcFire" aria-label="Ateş">💥</button>
+  <button class="bc-move" id="bcRight" aria-label="Sağa">▶</button>
+</div>
+
+<div class="battle-result hidden" id="battleResult">
+  <h2 id="battleResultTitle"></h2>
+  <div class="battle-result-btns">
+    <button class="btn" id="battleRetry">↺ Tekrar Oyna</button>
+    <button class="btn alt" id="battleExit">⚓ Sandbox'a Dön</button>
+  </div>
+</div>
+
+<div class="fps" id="fps">–</div>
+
+<div class="panel">
+  <div class="ctl">
+    <label>Dalga Boyu</label>
+    <input id="waveSize" type="range" min="0.2" max="2.5" step="0.05" value="1">
+  </div>
+  <div class="ctl">
+    <label>Rüzgâr</label>
+    <input id="wind" type="range" min="0" max="1.5" step="0.05" value="0.35">
+  </div>
+  <div class="ctl">
+    <label>Sıçrama</label>
+    <input id="splash" type="range" min="0.3" max="2.5" step="0.1" value="1.2">
+  </div>
+  <button class="btn" id="storm">🌧️ Fırtına</button>
+  <button class="btn alt" id="tsunami">🌊 Tsunami</button>
+  <button class="btn alt" id="rain">☔ Yağmur</button>
+  <button class="btn alt" id="cannon">💣 Top Ateşle</button>
+  <button class="btn alt" id="kraken">🦑 Kraken</button>
+  <button class="btn alt" id="acidRain">🧪 Asit Yağmuru</button>
+  <button class="btn" id="reset">↺ Sıfırla</button>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById('scene');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  // ---------- Ses motoru (Web Audio API, dışarıdan dosya yok) ----------
+  let audioCtx = null, masterGain = null, sfxGain = null, ambientGain = null;
+  let noiseBuffer = null, audioMuted = false;
+  let waveGain = null, windGain = null, rainGain = null, acidGain = null;
+
+  function makeNoiseBuffer() {
+    const len = audioCtx.sampleRate * 2;
+    const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+  function noiseSource(loop) {
+    const src = audioCtx.createBufferSource();
+    src.buffer = noiseBuffer;
+    src.loop = !!loop;
+    return src;
+  }
+  function startAmbientLoops() {
+    const wave = noiseSource(true);
+    const waveFilter = audioCtx.createBiquadFilter();
+    waveFilter.type = 'lowpass'; waveFilter.frequency.value = 380;
+    waveGain = audioCtx.createGain(); waveGain.gain.value = 0.16;
+    wave.connect(waveFilter); waveFilter.connect(waveGain); waveGain.connect(ambientGain);
+    wave.start();
+
+    const wind = noiseSource(true);
+    const windFilter = audioCtx.createBiquadFilter();
+    windFilter.type = 'bandpass'; windFilter.frequency.value = 900; windFilter.Q.value = 0.7;
+    windGain = audioCtx.createGain(); windGain.gain.value = 0;
+    wind.connect(windFilter); windFilter.connect(windGain); windGain.connect(ambientGain);
+    wind.start();
+
+    const rain = noiseSource(true);
+    const rainFilter = audioCtx.createBiquadFilter();
+    rainFilter.type = 'highpass'; rainFilter.frequency.value = 1700;
+    rainGain = audioCtx.createGain(); rainGain.gain.value = 0;
+    rain.connect(rainFilter); rainFilter.connect(rainGain); rainGain.connect(ambientGain);
+    rain.start();
+
+    const acid = noiseSource(true);
+    const acidFilter = audioCtx.createBiquadFilter();
+    acidFilter.type = 'bandpass'; acidFilter.frequency.value = 2600; acidFilter.Q.value = 0.9;
+    acidGain = audioCtx.createGain(); acidGain.gain.value = 0;
+    acid.connect(acidFilter); acidFilter.connect(acidGain); acidGain.connect(ambientGain);
+    acid.start();
+  }
+  function ensureAudio() {
+    if (audioCtx) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return;
+    }
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain(); masterGain.gain.value = audioMuted ? 0 : 0.85;
+    masterGain.connect(audioCtx.destination);
+    sfxGain = audioCtx.createGain(); sfxGain.gain.value = 1;
+    ambientGain = audioCtx.createGain(); ambientGain.gain.value = 1;
+    sfxGain.connect(masterGain); ambientGain.connect(masterGain);
+    noiseBuffer = makeNoiseBuffer();
+    startAmbientLoops();
+  }
+  function toggleMute() {
+    audioMuted = !audioMuted;
+    if (masterGain) masterGain.gain.setTargetAtTime(audioMuted ? 0 : 0.85, audioCtx.currentTime, 0.05);
+    return audioMuted;
+  }
+
+  // -- kısa efektler --
+  function playSplash(power) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const amt = Math.min(1, 0.18 + power * 0.018);
+    const src = noiseSource();
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = Math.max(280, 1700 - power * 16); bp.Q.value = 1.1;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(amt * 0.6, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.32 + Math.min(0.35, power * 0.008));
+    src.connect(bp); bp.connect(g); g.connect(sfxGain);
+    src.start(t); src.stop(t + 0.8);
+
+    const osc = audioCtx.createOscillator(); osc.type = 'sine';
+    osc.frequency.setValueAtTime(210 + power * 1.5, t);
+    osc.frequency.exponentialRampToValueAtTime(55, t + 0.17);
+    const og = audioCtx.createGain();
+    og.gain.setValueAtTime(amt * 0.45, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    osc.connect(og); og.connect(sfxGain);
+    osc.start(t); osc.stop(t + 0.25);
+  }
+  function playCannon() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(3500, t); lp.frequency.exponentialRampToValueAtTime(170, t + 0.5);
+    const ng = audioCtx.createGain();
+    ng.gain.setValueAtTime(0.9, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    noise.connect(lp); lp.connect(ng); ng.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.6);
+
+    const osc = audioCtx.createOscillator(); osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(34, t + 0.35);
+    const og = audioCtx.createGain();
+    og.gain.setValueAtTime(1, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    osc.connect(og); og.connect(sfxGain);
+    osc.start(t); osc.stop(t + 0.5);
+  }
+  function playThunder() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime + 0.1 + Math.random() * 0.25;
+    const noise = noiseSource();
+    const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1100, t); lp.frequency.exponentialRampToValueAtTime(75, t + 1.6);
+    const ng = audioCtx.createGain();
+    ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.65, t + 0.05);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+    noise.connect(lp); lp.connect(ng); ng.connect(sfxGain);
+    noise.start(t); noise.stop(t + 2);
+
+    const osc = audioCtx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 52;
+    const og = audioCtx.createGain();
+    og.gain.setValueAtTime(0.55, t); og.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+    osc.connect(og); og.connect(sfxGain);
+    osc.start(t); osc.stop(t + 1.5);
+  }
+  function playKraken() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+
+    // ağırlık veren alt-bas gövde
+    const sub = audioCtx.createOscillator(); sub.type = 'sine'; sub.frequency.value = 42;
+    const subG = audioCtx.createGain();
+    subG.gain.setValueAtTime(0.0001, t);
+    subG.gain.linearRampToValueAtTime(0.45, t + 0.5);
+    subG.gain.exponentialRampToValueAtTime(0.001, t + 2.8);
+    sub.connect(subG); subG.connect(sfxGain);
+
+    // kükreme gövdesi
+    const o1 = audioCtx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 68;
+    const o2 = audioCtx.createOscillator(); o2.type = 'sine'; o2.frequency.value = 71;
+    const o3 = audioCtx.createOscillator(); o3.type = 'triangle'; o3.frequency.value = 136;
+    const lfo = audioCtx.createOscillator(); lfo.frequency.value = 4.2;
+    const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 6;
+    lfo.connect(lfoGain); lfoGain.connect(o1.frequency); lfoGain.connect(o2.frequency);
+    const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.5, t + 0.6);
+    g.gain.linearRampToValueAtTime(0.35, t + 1.6);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.6);
+    const o3g = audioCtx.createGain(); o3g.gain.value = 0.12;
+    o1.connect(lp); o2.connect(lp); o3.connect(o3g); o3g.connect(lp); lp.connect(g); g.connect(sfxGain);
+
+    // saldırı anındaki tiz çığlık vurması
+    const hiss = audioCtx.createOscillator(); hiss.type = 'sawtooth';
+    hiss.frequency.setValueAtTime(900, t);
+    hiss.frequency.exponentialRampToValueAtTime(260, t + 0.35);
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 2.2;
+    const hissG = audioCtx.createGain();
+    hissG.gain.setValueAtTime(0.0001, t);
+    hissG.gain.linearRampToValueAtTime(0.22, t + 0.06);
+    hissG.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    hiss.connect(bp); bp.connect(hissG); hissG.connect(sfxGain);
+
+    sub.start(t); o1.start(t); o2.start(t); o3.start(t); lfo.start(t); hiss.start(t);
+    sub.stop(t + 2.9); o1.stop(t + 2.9); o2.stop(t + 2.9); o3.stop(t + 2.9); lfo.stop(t + 2.9); hiss.stop(t + 0.5);
+  }
+  function playWreck() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 0.8;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.45);
+    playSplash(34);
+  }
+  function playPiranhaBite() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    for (let i = 0; i < 5; i++) {
+      const st = t + i * 0.045 + Math.random() * 0.015;
+      const snap = audioCtx.createOscillator(); snap.type = 'square';
+      snap.frequency.setValueAtTime(620 + Math.random() * 420, st);
+      snap.frequency.exponentialRampToValueAtTime(90, st + 0.06);
+      const sg = audioCtx.createGain();
+      sg.gain.setValueAtTime(0.0001, st);
+      sg.gain.linearRampToValueAtTime(0.32, st + 0.006);
+      sg.gain.exponentialRampToValueAtTime(0.001, st + 0.09);
+      snap.connect(sg); sg.connect(sfxGain);
+      snap.start(st); snap.stop(st + 0.1);
+    }
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 1.4;
+    const ng = audioCtx.createGain();
+    ng.gain.setValueAtTime(0.4, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    noise.connect(bp); bp.connect(ng); ng.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.32);
+    playSplash(18);
+  }
+  function playStorkCall() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const st = t + i * 0.15;
+      const o = audioCtx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(1150 + Math.random() * 220, st);
+      o.frequency.exponentialRampToValueAtTime(640, st + 0.11);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.linearRampToValueAtTime(0.2, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.14);
+      o.connect(g); g.connect(sfxGain);
+      o.start(st); o.stop(st + 0.16);
+    }
+  }
+  function playStorkPoop() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 900;
+    const ng = audioCtx.createGain();
+    ng.gain.setValueAtTime(0.5, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+    noise.connect(bp); bp.connect(ng); ng.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.28);
+    const osc = audioCtx.createOscillator(); osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(55, t + 0.2);
+    const og = audioCtx.createGain();
+    og.gain.setValueAtTime(0.4, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.connect(og); og.connect(sfxGain);
+    osc.start(t); osc.stop(t + 0.25);
+  }
+  function playMeltFinish() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(2200, t); bp.frequency.exponentialRampToValueAtTime(300, t + 0.9);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 1.05);
+  }
+  function playSizzle() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'highpass'; bp.frequency.value = 2800 + Math.random() * 1200;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.15);
+  }
+  function playTsunamiWhoosh() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(180, t);
+    bp.frequency.linearRampToValueAtTime(900, t + 0.9);
+    bp.frequency.linearRampToValueAtTime(150, t + 2.2);
+    bp.Q.value = 0.9;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.6, t + 0.7);
+    g.gain.linearRampToValueAtTime(0.4, t + 1.4);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.3);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 2.4);
+  }
+  function playGust() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(400, t); bp.frequency.linearRampToValueAtTime(1500, t + 0.3);
+    bp.frequency.linearRampToValueAtTime(300, t + 0.8);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+    noise.connect(bp); bp.connect(g); g.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.95);
+    playSplash(40);
+  }
+  function playReset() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    [660, 880].forEach((f, i) => {
+      const osc = audioCtx.createOscillator(); osc.type = 'sine'; osc.frequency.value = f;
+      const g = audioCtx.createGain();
+      const st = t + i * 0.09;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.linearRampToValueAtTime(0.3, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.3);
+      osc.connect(g); g.connect(sfxGain);
+      osc.start(st); osc.stop(st + 0.32);
+    });
+  }
+  function playToggle(isOn) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(); osc.type = 'triangle';
+    osc.frequency.value = isOn ? 520 : 360;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.25, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    osc.connect(g); g.connect(sfxGain);
+    osc.start(t); osc.stop(t + 0.18);
+  }
+
+  function updateAudio() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const windAmt = parseFloat(windEl.value) || 0;
+    windGain.gain.setTargetAtTime(Math.min(0.5, windAmt * 0.06), t, 0.4);
+    rainGain.gain.setTargetAtTime(raining ? 0.22 : 0, t, 0.4);
+    acidGain.gain.setTargetAtTime(acidRaining ? 0.2 : 0, t, 0.4);
+  }
+
+  // ---------- Boyut / DPI yönetimi ----------
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    buildWater();
+    buildSkyGradient();
+  }
+
+  // ---------- Su yüzeyi: yay tabanlı yükseklik alanı ----------
+  // Klasik "spring water": her sütun bir yaya bağlı, komşulara yayılım yapılır.
+  const COL_W = 7;             // sütun genişliği (px)
+  let cols = 0;
+  let baseLevel = 0;           // sakin su seviyesi (y)
+  const SPRING_K = 0.022;      // yay sertliği
+  const DAMP = 0.026;          // sönümleme
+  const SPREAD = 0.20;         // komşuya yayılım
+
+  let height = [];   // dikey yer değiştirme
+  let vel = [];      // hız
+
+  function buildWater() {
+    cols = Math.ceil(W / COL_W) + 1;
+    baseLevel = H * 0.52;
+    height = new Array(cols).fill(0);
+    vel = new Array(cols).fill(0);
+  }
+
+  function splashAt(x, power, spread = 1) {
+    const i = Math.max(0, Math.min(cols - 1, Math.round(x / COL_W)));
+    const w = Math.max(1, Math.round(spread));
+    for (let d = -w; d <= w; d++) {
+      const idx = i + d;
+      if (idx < 0 || idx >= cols) continue;
+      const falloff = 1 - Math.abs(d) / (w + 1);
+      vel[idx] += power * falloff;
+    }
+  }
+
+  function updateWater() {
+    const sizeMul = parseFloat(waveSizeEl.value);
+    // Yay fiziği
+    for (let i = 0; i < cols; i++) {
+      const x = height[i];
+      const a = -SPRING_K * sizeMul * x - DAMP * vel[i];
+      vel[i] += a;
+      height[i] += vel[i];
+    }
+    // Komşulara yayılım (iki geçiş, kararlılık için)
+    const lDelta = new Array(cols).fill(0);
+    const rDelta = new Array(cols).fill(0);
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < cols; i++) {
+        if (i > 0) { lDelta[i] = SPREAD * (height[i] - height[i - 1]); vel[i - 1] += lDelta[i]; }
+        if (i < cols - 1) { rDelta[i] = SPREAD * (height[i] - height[i + 1]); vel[i + 1] += rDelta[i]; }
+      }
+      for (let i = 0; i < cols; i++) {
+        if (i > 0) height[i - 1] += lDelta[i] * 0.5;
+        if (i < cols - 1) height[i + 1] += rDelta[i] * 0.5;
+      }
+    }
+  }
+
+  // Su yüzeyi yüksekliğini herhangi bir x için (rüzgâr dalgaları dahil) verir
+  function surfaceY(x, t) {
+    const i = x / COL_W;
+    const i0 = Math.floor(i), i1 = Math.min(cols - 1, i0 + 1);
+    const f = i - i0;
+    const disp = (height[Math.max(0, i0)] || 0) * (1 - f) + (height[i1] || 0) * f;
+    // ek prosedürel rüzgâr dalgacıkları (detay için)
+    const wind = parseFloat(windEl.value);
+    const ripple =
+      Math.sin(x * 0.020 + t * 1.7) * 5.0 * wind +
+      Math.sin(x * 0.052 - t * 2.6) * 2.4 * wind +
+      Math.sin(x * 0.005 + t * 0.7) * 7.0 * wind;
+    // tsunami: dev gezici kabarma (su yükselir → y küçülür)
+    let tsu = 0;
+    if (tsunami.active) {
+      const dx = (x - tsunami.x) / tsunami.width;
+      tsu = -tsunami.amp * Math.exp(-dx * dx * 0.5);
+      // ön cephe daha dik (yön doğrultusunda)
+      if (Math.sign(x - tsunami.x) === tsunami.dir) tsu *= 0.6;
+    }
+    return baseLevel + disp + ripple + tsu;
+  }
+
+  // ---------- Parçacıklar (sıçrayan su damlaları + köpük) ----------
+  const particles = [];
+  const MAX_PARTICLES = 1400;
+  function spawnSplash(x, y, power, dir = 0, kind = 'water') {
+    const splashMul = parseFloat(splashEl.value);
+    const n = Math.min(60, Math.floor(power * 2.2 * splashMul));
+    for (let k = 0; k < n; k++) {
+      if (particles.length >= MAX_PARTICLES) break;
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.7 + dir * 0.5;
+      const spd = (1.5 + Math.random() * 5.5) * (0.6 + power * 0.05) * splashMul;
+      particles.push({
+        x, y,
+        vx: Math.cos(ang) * spd + dir * 2.2,
+        vy: Math.sin(ang) * spd - Math.random() * 2,
+        r: 0.8 + Math.random() * 2.6,
+        life: 1,
+        decay: 0.008 + Math.random() * 0.02,
+        foam: Math.random() < 0.35,
+        kind
+      });
+    }
+  }
+
+  function updateParticles() {
+    const G = 0.16;
+    for (let k = particles.length - 1; k >= 0; k--) {
+      const p = particles[k];
+      p.vy += G;
+      p.vx *= 0.992;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.decay;
+      // suya geri düşünce küçük dalga + yok ol
+      const sy = surfaceY(p.x, timeNow);
+      if (p.y >= sy && p.vy > 0) {
+        splashAt(p.x, Math.min(2.2, p.vy * 0.25));
+        p.life = 0;
+      }
+      if (p.life <= 0 || p.x < -20 || p.x > W + 20) particles.splice(k, 1);
+    }
+  }
+
+  // ---------- Tsunami (dev gezici dalga) ----------
+  const tsunami = { active: false, x: 0, dir: 1, amp: 0, width: 130, speed: 6 };
+  function launchTsunami() {
+    tsunami.active = true;
+    tsunami.dir = Math.random() < 0.5 ? 1 : -1;
+    tsunami.x = tsunami.dir === 1 ? -200 : W + 200;
+    tsunami.amp = Math.min(H * 0.42, 150 + Math.random() * 120);
+    tsunami.width = 110 + Math.random() * 60;
+    tsunami.speed = 6 + Math.random() * 3;
+    playTsunamiWhoosh();
+  }
+  function updateTsunami(dt) {
+    if (!tsunami.active) return;
+    tsunami.x += tsunami.dir * tsunami.speed * dt;
+    // tepede sürekli köpük fışkırması
+    if (Math.random() < 0.9) {
+      const cx = tsunami.x + (Math.random() - 0.5) * tsunami.width;
+      spawnSplash(cx, surfaceY(cx, timeNow), tsunami.amp * 0.06, tsunami.dir);
+    }
+    // önündeki suyu kaldır
+    splashAt(tsunami.x + tsunami.dir * tsunami.width * 0.5, -tsunami.amp * 0.05, 4);
+    // bittiğinde dağıt
+    if ((tsunami.dir === 1 && tsunami.x > W + 250) || (tsunami.dir === -1 && tsunami.x < -250)) {
+      tsunami.active = false;
+    }
+  }
+
+  // ---------- Yağmur ----------
+  let raining = false;
+  const rainDrops = [];
+  function updateRain() {
+    if (raining) {
+      const count = Math.floor(W / 120);
+      for (let i = 0; i < count; i++) {
+        rainDrops.push({ x: Math.random() * (W + 120) - 60, y: -10, vy: 11 + Math.random() * 8, len: 9 + Math.random() * 12 });
+      }
+    }
+    for (let k = rainDrops.length - 1; k >= 0; k--) {
+      const d = rainDrops[k];
+      d.y += d.vy;
+      const sy = surfaceY(d.x, timeNow);
+      if (d.y >= sy) {
+        splashAt(d.x, 0.9, 1);
+        if (Math.random() < 0.25) spawnSplash(d.x, sy, 1.2);
+        rainDrops.splice(k, 1);
+      } else if (d.y > H) rainDrops.splice(k, 1);
+    }
+  }
+  function drawRain() {
+    if (rainDrops.length === 0) return;
+    ctx.strokeStyle = 'rgba(180,220,255,0.45)';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    for (const d of rainDrops) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 1.5, d.y - d.len); }
+    ctx.stroke();
+  }
+
+  // ---------- Asit Yağmuru (gemiyi eritir) ----------
+  let acidRaining = false;
+  const acidDrops = [];
+  const MELT_THRESHOLD = 1;
+  function hitsShip(x, y) {
+    if (ship.state !== 'float' && ship.state !== 'melting') return false;
+    const dx = x - ship.x, dy = y - ship.y;
+    const cos = Math.cos(-ship.angle), sin = Math.sin(-ship.angle);
+    const lx = dx * cos - dy * sin;
+    const ly = dx * sin + dy * cos;
+    return Math.abs(lx) < ship.w * 0.5 && ly > -ship.h * 1.1 && ly < ship.h * 0.2;
+  }
+  function updateAcidRain() {
+    if (acidRaining) {
+      const count = Math.floor(W / 110);
+      for (let i = 0; i < count; i++) {
+        acidDrops.push({ x: Math.random() * (W + 120) - 60, y: -10, vy: 10 + Math.random() * 7, len: 8 + Math.random() * 11 });
+      }
+    }
+    for (let k = acidDrops.length - 1; k >= 0; k--) {
+      const d = acidDrops[k];
+      d.y += d.vy;
+      if (hitsShip(d.x, d.y)) {
+        ship.acid = Math.min(MELT_THRESHOLD, ship.acid + 0.012);
+        spawnSplash(d.x, d.y, 1.4, 0, 'acid');
+        if (ship.state === 'float' && ship.acid >= MELT_THRESHOLD) startMelting();
+        acidDrops.splice(k, 1);
+        continue;
+      }
+      const sy = surfaceY(d.x, timeNow);
+      if (d.y >= sy) {
+        splashAt(d.x, 0.9, 1);
+        if (Math.random() < 0.3) spawnSplash(d.x, sy, 1.2, 0, 'acid');
+        acidDrops.splice(k, 1);
+      } else if (d.y > H) {
+        acidDrops.splice(k, 1);
+      }
+    }
+  }
+  function drawAcidRain() {
+    if (acidDrops.length === 0) return;
+    ctx.strokeStyle = 'rgba(140,255,90,0.55)';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    for (const d of acidDrops) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 1.5, d.y - d.len); }
+    ctx.stroke();
+  }
+
+  // ---------- Top gülleleri ----------
+  const balls = [];
+  function fireCannon() {
+    const dir = ship.x < W * 0.5 ? 1 : -1;
+    const mx = ship.x + dir * ship.w * 0.5;
+    const my = ship.y - ship.h * 0.2;
+    balls.push({ x: mx, y: my, vx: dir * (9 + Math.random() * 2), vy: -7 - Math.random() * 2, r: 6 });
+    ship.vx -= dir * 2.5;          // geri tepme
+    ship.vy -= 1.2;
+    spawnSplash(mx, my, 8, dir);   // namlu dumanı yerine kıvılcım
+    playCannon();
+  }
+  function updateBalls(dt) {
+    for (let k = balls.length - 1; k >= 0; k--) {
+      const b = balls[k];
+      b.vy += 0.25 * dt;
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      const sy = surfaceY(b.x, timeNow);
+      if (b.y >= sy) {
+        splashAt(b.x, 14, 4);                 // büyük dalga
+        spawnSplash(b.x, sy, 26);             // patlama gibi sıçrama
+        balls.splice(k, 1);
+      } else if (b.x < -40 || b.x > W + 40 || b.y > H) balls.splice(k, 1);
+    }
+  }
+  function drawBalls() {
+    for (const b of balls) {
+      const g = ctx.createRadialGradient(b.x - 2, b.y - 2, 0, b.x, b.y, b.r);
+      g.addColorStop(0, '#6b7280'); g.addColorStop(1, '#111827');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.283); ctx.fill();
+    }
+  }
+
+  // ---------- Baloncuklar (su altı) ----------
+  const bubbles = [];
+  function spawnBubble(x, y) {
+    if (bubbles.length >= 500) return;
+    bubbles.push({ x, y, r: 1 + Math.random() * 3.5, vy: -(0.6 + Math.random() * 1.8), wob: Math.random() * 6.28 });
+  }
+  function updateBubbles(dt) {
+    for (let k = bubbles.length - 1; k >= 0; k--) {
+      const b = bubbles[k];
+      b.y += b.vy * dt;
+      b.x += Math.sin(timeNow * 3 + b.wob) * 0.5;
+      if (b.y <= surfaceY(b.x, timeNow)) { splashAt(b.x, 0.6, 1); bubbles.splice(k, 1); }
+    }
+  }
+  function drawBubbles() {
+    ctx.strokeStyle = 'rgba(210,240,255,0.45)';
+    ctx.fillStyle = 'rgba(210,240,255,0.12)';
+    ctx.lineWidth = 1;
+    for (const b of bubbles) {
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.283); ctx.fill(); ctx.stroke();
+    }
+  }
+
+  // ---------- Gemi enkazı ----------
+  const debris = [];
+  function wreckShip() {
+    if (ship.state === 'wrecked') return;
+    ship.state = 'wrecked';
+    playWreck();
+    const cx = ship.x, cy = ship.y;
+    const woods = ['#c98a4b', '#8a5a30', '#6e4423', '#a06a38', '#4a2f18'];
+    // gövde tahtaları
+    for (let i = 0; i < 12; i++) {
+      debris.push({
+        x: cx + (Math.random() - 0.5) * ship.w * 0.8,
+        y: cy + (Math.random() - 0.5) * ship.h,
+        vx: (Math.random() - 0.5) * 6, vy: -2 - Math.random() * 5,
+        w: 16 + Math.random() * 30, h: 5 + Math.random() * 6,
+        angle: Math.random() * 6.28, vAngle: (Math.random() - 0.5) * 0.25,
+        color: woods[i % woods.length], type: 'plank', buoyant: Math.random() < 0.85
+      });
+    }
+    // direk
+    debris.push({ x: cx, y: cy - ship.h, vx: (Math.random() - 0.5) * 4, vy: -3,
+      w: 7, h: 95, angle: 0.3, vAngle: (Math.random() - 0.5) * 0.18, color: '#3a2614', type: 'plank', buoyant: true });
+    // yelken (yırtık)
+    debris.push({ x: cx + 14, y: cy - ship.h * 0.8, vx: (Math.random() - 0.5) * 3, vy: -2,
+      w: 46, h: 44, angle: 0, vAngle: (Math.random() - 0.5) * 0.12, color: '#f3e7c4', type: 'sail', buoyant: true });
+    // bayrak
+    debris.push({ x: cx, y: cy - ship.h * 1.5, vx: (Math.random() - 0.5) * 5, vy: -3,
+      w: 22, h: 12, angle: 0, vAngle: (Math.random() - 0.5) * 0.2, color: '#d6334a', type: 'flag', buoyant: true });
+    // patlama: dalga + sıçrama + baloncuk
+    spawnSplash(cx, surfaceY(cx, timeNow), 34);
+    splashAt(cx, -16, 5);
+    for (let i = 0; i < 40; i++) spawnBubble(cx + (Math.random() - 0.5) * ship.w, cy + (Math.random() - 0.5) * ship.h);
+  }
+  function updateDebris(dt) {
+    for (const d of debris) {
+      const sy = surfaceY(d.x, timeNow);
+      if (d.buoyant) {
+        if (d.y > sy + 4) { d.vy += -0.45 * dt; d.vy *= 0.92; }   // su kaldırması
+        else { d.vy += 0.12 * dt; d.y += (sy - d.y) * 0.08; d.vy *= 0.8; } // yüzeyde sallanma
+        d.vx *= 0.97;
+      } else {
+        d.vy += 0.12 * dt; d.vy *= 0.94; d.vx *= 0.96;            // dibe batar
+        if (d.y > H - 8) { d.y = H - 8; d.vy = 0; }
+      }
+      d.x += d.vx * dt; d.y += d.vy * dt; d.angle += d.vAngle * dt;
+      if (d.x < 8) { d.x = 8; d.vx *= -0.5; }
+      if (d.x > W - 8) { d.x = W - 8; d.vx *= -0.5; }
+    }
+  }
+  function drawDebris() {
+    for (const d of debris) {
+      ctx.save();
+      ctx.translate(d.x, d.y); ctx.rotate(d.angle);
+      if (d.type === 'sail') {
+        ctx.fillStyle = d.color;
+        ctx.beginPath();
+        ctx.moveTo(-d.w / 2, -d.h / 2); ctx.lineTo(d.w / 2, -d.h / 3);
+        ctx.lineTo(d.w / 3, d.h / 2); ctx.lineTo(-d.w / 2, d.h / 3);
+        ctx.closePath(); ctx.fill();
+      } else if (d.type === 'flag') {
+        ctx.fillStyle = d.color;
+        ctx.beginPath();
+        ctx.moveTo(-d.w / 2, -d.h / 2); ctx.lineTo(d.w / 2, 0); ctx.lineTo(-d.w / 2, d.h / 2);
+        ctx.closePath(); ctx.fill();
+      } else {
+        const g = ctx.createLinearGradient(0, -d.h / 2, 0, d.h / 2);
+        g.addColorStop(0, d.color); g.addColorStop(1, '#2c1c10');
+        ctx.fillStyle = g;
+        ctx.fillRect(-d.w / 2, -d.h / 2, d.w, d.h);
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+        ctx.strokeRect(-d.w / 2, -d.h / 2, d.w, d.h);
+      }
+      ctx.restore();
+    }
+  }
+
+  // ---------- Kraken (gemiyi kavrayıp dibe çeken canavar) ----------
+  const kraken = { active: false, x: 0, t: 0, life: 0, phase: 'idle', grabT: 0, arms: [] };
+  function summonKraken() {
+    if (ship.state !== 'float') return;          // zaten yakalanmış/parçalanmışsa
+    kraken.active = true;
+    kraken.x = ship.x;
+    kraken.t = 0; kraken.grabT = 0; kraken.phase = 'rise';
+    kraken.arms = [];
+    const n = 6;
+    for (let i = 0; i < n; i++) {
+      kraken.arms.push({
+        base: (i - (n - 1) / 2) * 32,
+        phase: Math.random() * 6.28,
+        speed: 1.6 + Math.random() * 1.0,
+        sway: 16 + Math.random() * 16
+      });
+    }
+    splashAt(kraken.x, -10, 5);
+    playKraken();
+  }
+  function updateKraken(dt) {
+    if (!kraken.active) return;
+    kraken.t += dt * 0.016;
+    const bottomY = H - 20;
+    if (kraken.phase === 'rise') {
+      kraken.x += (ship.x - kraken.x) * 0.05;
+      if (Math.random() < 0.5) spawnSplash(kraken.x + (Math.random() - 0.5) * 180, surfaceY(kraken.x, timeNow), 4);
+      if (kraken.t > 1.1) {                       // gemiyi kavra
+        kraken.phase = 'pull'; kraken.grabT = 0;
+        ship.state = 'grabbed'; ship.held = false;
+        canvas.classList.remove('dragging');
+        splashAt(ship.x, -10, 5);
+      }
+    } else if (kraken.phase === 'pull') {
+      kraken.grabT += dt * 0.016;
+      // gemiyi dibe sürükle
+      const ty = bottomY - ship.h * 0.4;
+      ship.x += (kraken.x - ship.x) * 0.05;
+      ship.y += (ty - ship.y) * 0.04;
+      ship.vx = 0; ship.vy = 0;
+      ship.angle = Math.sin(kraken.grabT * 5) * 0.3;            // çırpınma
+      if (Math.random() < 0.85) spawnBubble(ship.x + (Math.random() - 0.5) * ship.w, ship.y + (Math.random() - 0.5) * ship.h);
+      splashAt(kraken.x, 4, 3);                                  // yüzeyde girdap
+      if (kraken.grabT >= 3) {                                   // 3sn sonra parçala
+        wreckShip();
+        kraken.phase = 'sink'; kraken.life = 2.2;
+      }
+    } else if (kraken.phase === 'sink') {
+      kraken.life -= dt * 0.016;
+      if (kraken.life <= 0) { kraken.active = false; kraken.phase = 'idle'; }
+    }
+  }
+  function drawKraken() {
+    if (!kraken.active) return;
+    const anchorY = H + 30;                        // derin dip
+    let reach, tipX, tipY;
+    if (kraken.phase === 'rise') {
+      reach = Math.min(1, kraken.t / 1.1);
+      tipX = ship.x; tipY = surfaceY(ship.x, timeNow) - ship.h * 0.2;
+    } else if (kraken.phase === 'sink') {
+      reach = Math.max(0, kraken.life / 2.2);
+      tipX = ship.x; tipY = ship.y;
+    } else {                                        // pull
+      reach = 1; tipX = ship.x; tipY = ship.y;
+    }
+    const headTarget = (kraken.phase === 'pull') ? ship.y + ship.h * 0.7 : surfaceY(kraken.x, timeNow) + 26;
+    const headY = anchorY + (headTarget - anchorY) * reach;
+
+    // dokunaçlar: dipten gemiye doğru
+    for (const a of kraken.arms) {
+      const ax = kraken.x + a.base;
+      const endX = ax + (tipX + a.base * 0.4 - ax) * reach;
+      const endY = anchorY + (tipY - anchorY) * reach;
+      const segs = 12;
+      ctx.lineCap = 'round';
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.beginPath();
+        for (let s = 0; s <= segs; s++) {
+          const f = s / segs;
+          const swayAmt = Math.sin(kraken.t * a.speed + a.phase + f * 4) * a.sway * Math.sin(f * Math.PI);
+          const x = ax + (endX - ax) * f + swayAmt;
+          const y = anchorY + (endY - anchorY) * f;
+          if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = pass === 0 ? '#3b1d52' : '#7c3aed';
+        ctx.lineWidth = (pass === 0 ? 22 : 14) * (0.45 + 0.55 * reach);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#c4b5fd';
+      for (let s = 2; s <= segs; s += 2) {
+        const f = s / segs;
+        const swayAmt = Math.sin(kraken.t * a.speed + a.phase + f * 4) * a.sway * Math.sin(f * Math.PI);
+        const x = ax + (endX - ax) * f + swayAmt;
+        const y = anchorY + (endY - anchorY) * f;
+        ctx.beginPath(); ctx.arc(x, y, 2.6 * (0.45 + 0.55 * reach), 0, 6.283); ctx.fill();
+      }
+    }
+    // kafa + parlayan gözler
+    const bodyG = ctx.createRadialGradient(kraken.x, headY, 4, kraken.x, headY, 48);
+    bodyG.addColorStop(0, '#5b2a82'); bodyG.addColorStop(1, '#2a1340');
+    ctx.fillStyle = bodyG;
+    ctx.beginPath(); ctx.ellipse(kraken.x, headY, 36 * reach, 46 * reach, 0, 0, 6.283); ctx.fill();
+    for (const dx of [-15, 15]) {
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath(); ctx.arc(kraken.x + dx, headY - 8, 7 * reach, 0, 6.283); ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.arc(kraken.x + dx, headY - 8, 3 * reach, 0, 6.283); ctx.fill();
+    }
+  }
+
+  // ---------- Şimşek ----------
+  let flash = 0, nextBolt = 0;
+  function updateLightning(dt) {
+    flash *= 0.88;
+    if ((raining || tsunami.active) && timeNow > nextBolt) {
+      nextBolt = timeNow + 2 + Math.random() * 5;
+      flash = 1;
+      bolt = makeBolt(Math.random() * W, baseLevel);
+      playThunder();
+    }
+  }
+  let bolt = null;
+  function makeBolt(x, yEnd) {
+    const pts = [{ x, y: 0 }];
+    let cx = x, cy = 0;
+    while (cy < yEnd) {
+      cy += 18 + Math.random() * 30;
+      cx += (Math.random() - 0.5) * 50;
+      pts.push({ x: cx, y: cy });
+    }
+    return pts;
+  }
+  function drawLightning() {
+    if (flash > 0.02) {
+      ctx.fillStyle = `rgba(200,225,255,${flash * 0.35})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    if (bolt && flash > 0.3) {
+      ctx.strokeStyle = `rgba(235,245,255,${flash})`;
+      ctx.lineWidth = 2.5; ctx.shadowColor = '#9ec5ff'; ctx.shadowBlur = 16;
+      ctx.beginPath();
+      bolt.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  // ---------- Gemi ----------
+  let shipSplashCooldown = 0;
+  const ship = {
+    x: 0, y: 0,
+    w: 150, h: 56,
+    vx: 0, vy: 0,
+    angle: 0, vAngle: 0,
+    held: false,
+    prevX: 0, prevY: 0,
+    state: 'float',           // 'float' | 'grabbed' | 'wrecked' | 'melting' | 'melted'
+    acid: 0, meltT: 0
+  };
+  function resetShip() {
+    ship.x = W * 0.5; ship.y = baseLevel - 40;
+    ship.vx = 0; ship.vy = 0; ship.angle = 0; ship.vAngle = 0;
+    ship.held = false;
+    ship.state = 'float';
+    ship.acid = 0; ship.meltT = 0;
+    debris.length = 0;
+    bubbles.length = 0;
+    goo.length = 0;
+    acidDrops.length = 0;
+    kraken.active = false; kraken.phase = 'idle';
+  }
+  function startMelting() {
+    if (ship.state !== 'float') return;
+    ship.state = 'melting';
+    ship.meltT = 0;
+    spawnImpactFlash(ship.x, surfaceY(ship.x, timeNow), 1.1, 'acid');
+    playSizzle();
+  }
+  function finishMelt() {
+    ship.state = 'melted';
+    const sy = surfaceY(ship.x, timeNow);
+    spawnSplash(ship.x, sy, 30, 0, 'acid');
+    goo.push({ x: ship.x, life: 1 });
+    for (let i = 0; i < 18; i++) spawnBubble(ship.x + (Math.random() - 0.5) * ship.w, ship.y + (Math.random() - 0.5) * ship.h);
+    playMeltFinish();
+  }
+
+  // ---------- Asit gölcüğü (gemi eridikten sonra suda kalan iz) ----------
+  const goo = [];
+  function updateGoo(dt) {
+    for (let k = goo.length - 1; k >= 0; k--) {
+      goo[k].life -= 0.05 * dt;
+      if (goo[k].life <= 0) goo.splice(k, 1);
+    }
+  }
+  function drawGoo(t) {
+    for (const g of goo) {
+      const y = surfaceY(g.x, t);
+      const r = 60 + 40 * (1 - g.life);
+      const grad = ctx.createRadialGradient(g.x, y, 0, g.x, y, r);
+      grad.addColorStop(0, `rgba(120,255,80,${0.4 * g.life})`);
+      grad.addColorStop(0.6, `rgba(80,200,50,${0.22 * g.life})`);
+      grad.addColorStop(1, 'rgba(80,200,50,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(g.x, y, r, r * 0.42, 0, 0, 6.283);
+      ctx.fill();
+    }
+  }
+
+  function updateShip(dt) {
+    if (ship.state === 'wrecked' || ship.state === 'grabbed' || ship.state === 'melted') return;
+    if (ship.state === 'melting') {
+      ship.meltT += dt * 0.016 / 3;             // ~3 saniyede tamamen erir
+      ship.vy += 0.05;                          // yavaşça batar
+      ship.y += ship.vy;
+      ship.vy *= 0.9;
+      if (Math.random() < 0.5) spawnBubble(ship.x + (Math.random() - 0.5) * ship.w, ship.y + (Math.random() - 0.5) * ship.h);
+      if (Math.random() < 0.4) spawnSplash(ship.x + (Math.random() - 0.5) * ship.w * 0.7, surfaceY(ship.x, timeNow), 2, 0, 'acid');
+      if (Math.random() < 0.06) playSizzle();
+      if (ship.meltT >= 1) finishMelt();
+      return;
+    }
+    if (ship.held) {
+      // hedefe doğru yumuşak takip; hız = yer değiştirme (su itme gücü için)
+      const tx = pointer.x, ty = pointer.y;
+      const nx = ship.x + (tx - ship.x) * 0.35;
+      const ny = ship.y + (ty - ship.y) * 0.35;
+      ship.vx = nx - ship.x;
+      ship.vy = ny - ship.y;
+      ship.x = nx; ship.y = ny;
+      // su itmesi: geminin geçtiği yerde dalga + sıçrama
+      const drag = Math.abs(ship.vx) + Math.abs(ship.vy);
+      if (drag > 1.2) {
+        splashAt(ship.x, Math.max(-6, -ship.vy * 0.4) - drag * 0.25, 3);
+        if (drag > 5 && Math.random() < 0.6) {
+          const edgeX = ship.x + Math.sign(ship.vx) * ship.w * 0.35;
+          spawnSplash(edgeX, surfaceY(edgeX, timeNow) - 4, drag * 0.7, Math.sign(ship.vx));
+        }
+      }
+    } else {
+      // Kaldırma kuvveti fiziği
+      const sy = surfaceY(ship.x, timeNow);
+      const targetY = sy - ship.h * 0.18;      // denge derinliği
+      const submerge = ship.y - targetY;        // batma miktarı
+      const buoyancy = -submerge * 0.04;        // yukarı itme
+      ship.vy += buoyancy;
+      ship.vy += 0.22;                          // yerçekimi
+      ship.vy *= 0.86;                          // su sürtünmesi
+      ship.vx *= 0.92;
+      ship.y += ship.vy;
+      ship.x += ship.vx;
+
+      // sınırlar
+      if (ship.x < ship.w * 0.5) { ship.x = ship.w * 0.5; ship.vx *= -0.4; }
+      if (ship.x > W - ship.w * 0.5) { ship.x = W - ship.w * 0.5; ship.vx *= -0.4; }
+
+      // dalgalara göre eğilme (gövde sol-sağ yüksekliği)
+      const yl = surfaceY(ship.x - ship.w * 0.4, timeNow);
+      const yr = surfaceY(ship.x + ship.w * 0.4, timeNow);
+      const targetAngle = Math.atan2(yr - yl, ship.w * 0.8);
+      ship.vAngle += (targetAngle - ship.angle) * 0.06;
+      ship.vAngle *= 0.85;
+      ship.angle += ship.vAngle;
+
+      // güçlü çarpma ile sıçrama
+      if (ship.vy > 3.5) {
+        spawnSplash(ship.x - ship.w * 0.3, sy, ship.vy * 1.4, -1);
+        spawnSplash(ship.x + ship.w * 0.3, sy, ship.vy * 1.4, 1);
+        splashAt(ship.x, -ship.vy * 0.7, 3);
+        if (shipSplashCooldown <= 0) { playSplash(ship.vy * 8); shipSplashCooldown = 24; }
+      }
+    }
+    if (shipSplashCooldown > 0) shipSplashCooldown -= dt;
+
+    // gemi geçtiği yerde sürekli küçük yer değiştirme (su seviyesini bastır)
+    if (ship.held) {
+      const sy = surfaceY(ship.x, timeNow);
+      const push = (ship.y + ship.h * 0.25 - sy) * 0.06;
+      if (push > 0) splashAt(ship.x, push, 2);
+    }
+  }
+
+  function pointInShip(px, py) {
+    const dx = px - ship.x, dy = py - ship.y;
+    const cos = Math.cos(-ship.angle), sin = Math.sin(-ship.angle);
+    const lx = dx * cos - dy * sin;
+    const ly = dx * sin + dy * cos;
+    return Math.abs(lx) < ship.w * 0.62 && Math.abs(ly) < ship.h * 1.6;
+  }
+
+  // ---------- Çizim: Gökyüzü ----------
+  let skyGrad = null, sunGrad = null;
+  function buildSkyGradient() {
+    skyGrad = ctx.createLinearGradient(0, 0, 0, baseLevel + 40);
+    skyGrad.addColorStop(0.00, '#0a1635');
+    skyGrad.addColorStop(0.35, '#15315f');
+    skyGrad.addColorStop(0.70, '#3a6ea5');
+    skyGrad.addColorStop(0.92, '#e8a36a');
+    skyGrad.addColorStop(1.00, '#f4c98a');
+  }
+
+  // yıldızlar (sabit)
+  const stars = [];
+  function buildStars() {
+    stars.length = 0;
+    for (let i = 0; i < 120; i++) {
+      stars.push({ x: Math.random(), y: Math.random() * 0.4, r: Math.random() * 1.3 + 0.2, tw: Math.random() * 6.28 });
+    }
+  }
+
+  // ---------- Gece/Gündüz döngüsü ----------
+  let dayNightOn = true;
+  let cycleT = 0;                 // 0..1, bir tam günü temsil eder
+  const CYCLE_DURATION = 50;      // saniye
+  function lerpColor(c1, c2, f) {
+    const a = parseInt(c1.slice(1), 16), b = parseInt(c2.slice(1), 16);
+    const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+    const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+    const r = Math.round(ar + (br - ar) * f), g = Math.round(ag + (bg - ag) * f), bl = Math.round(ab + (bb - ab) * f);
+    return `rgb(${r},${g},${bl})`;
+  }
+  function drawSky(t) {
+    if (!dayNightOn) {
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, W, baseLevel + 60);
+
+      // yıldızlar
+      for (const s of stars) {
+        const alpha = (0.3 + 0.7 * Math.abs(Math.sin(s.tw + t * 1.5))) * (1 - s.y / 0.5);
+        ctx.globalAlpha = Math.max(0, alpha) * 0.8;
+        ctx.fillStyle = '#dbeafe';
+        ctx.beginPath();
+        ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // güneş / ay halesi
+      const sunX = W * 0.78, sunY = baseLevel * 0.42;
+      const halo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 220);
+      halo.addColorStop(0, 'rgba(255,236,190,0.95)');
+      halo.addColorStop(0.18, 'rgba(255,210,150,0.6)');
+      halo.addColorStop(0.5, 'rgba(255,180,120,0.18)');
+      halo.addColorStop(1, 'rgba(255,180,120,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(sunX - 240, sunY - 240, 480, 480);
+      ctx.fillStyle = '#fff4d8';
+      ctx.beginPath(); ctx.arc(sunX, sunY, 46, 0, 6.283); ctx.fill();
+
+      return { sunX, sunY };
+    }
+
+    // ---- dinamik döngü ----
+    const theta = cycleT * Math.PI * 2;
+    const elevation = Math.sin(theta);              // >0 gündüz, <0 gece
+    const dayFactor = elevation * 0.5 + 0.5;         // 0..1
+    const warm = Math.max(0, 1 - Math.abs(elevation) / 0.3); // gün doğumu/batımı sıcaklığı
+
+    const top = lerpColor('#02040f', '#1e6fc9', dayFactor);
+    const mid = lerpColor('#0a1635', '#4fa8e0', dayFactor);
+    const horizonBase = lerpColor('#152040', '#bfe3f5', dayFactor);
+    const horizon = warm > 0.02 ? lerpColor(horizonBase, '#ff8a4d', warm) : horizonBase;
+    const skyDyn = ctx.createLinearGradient(0, 0, 0, baseLevel + 40);
+    skyDyn.addColorStop(0.00, top);
+    skyDyn.addColorStop(0.45, mid);
+    skyDyn.addColorStop(0.85, horizon);
+    skyDyn.addColorStop(1.00, warm > 0.15 ? lerpColor(horizon, '#f4c98a', warm) : horizon);
+    ctx.fillStyle = skyDyn;
+    ctx.fillRect(0, 0, W, baseLevel + 60);
+
+    // yıldızlar: sadece gece görünür, gün doğumuna/batımına yaklaşırken sönükleşir
+    const starVis = Math.max(0, -elevation);
+    if (starVis > 0.02) {
+      for (const s of stars) {
+        const tw = (0.3 + 0.7 * Math.abs(Math.sin(s.tw + t * 1.5))) * (1 - s.y / 0.5);
+        ctx.globalAlpha = Math.max(0, tw) * 0.8 * starVis;
+        ctx.fillStyle = '#dbeafe';
+        ctx.beginPath();
+        ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // güneş gündüz, ay gece — aynı yay üzerinde zıt konumda
+    const arcW = W * 0.46, arcH = baseLevel * 0.55;
+    const sunX = W * 0.5 - Math.cos(theta) * arcW;
+    const sunY = baseLevel * 0.5 - elevation * arcH;
+    const moonTheta = theta + Math.PI;
+    const moonElevation = Math.sin(moonTheta);
+    const moonX = W * 0.5 - Math.cos(moonTheta) * arcW;
+    const moonY = baseLevel * 0.5 - moonElevation * arcH;
+
+    if (elevation > -0.06) {
+      const haloColor = warm > 0.2 ? `rgba(255,170,110,${0.6})` : 'rgba(255,236,190,0.95)';
+      const halo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 220);
+      halo.addColorStop(0, haloColor);
+      halo.addColorStop(0.18, 'rgba(255,210,150,0.55)');
+      halo.addColorStop(0.5, 'rgba(255,180,120,0.16)');
+      halo.addColorStop(1, 'rgba(255,180,120,0)');
+      ctx.globalAlpha = Math.min(1, (elevation + 0.06) * 4);
+      ctx.fillStyle = halo;
+      ctx.fillRect(sunX - 240, sunY - 240, 480, 480);
+      ctx.fillStyle = warm > 0.2 ? '#ffd9a8' : '#fff4d8';
+      ctx.beginPath(); ctx.arc(sunX, sunY, 46, 0, 6.283); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    if (moonElevation > -0.06) {
+      ctx.globalAlpha = Math.min(1, (moonElevation + 0.06) * 4);
+      const mhalo = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 130);
+      mhalo.addColorStop(0, 'rgba(220,230,255,0.55)');
+      mhalo.addColorStop(0.5, 'rgba(180,200,255,0.12)');
+      mhalo.addColorStop(1, 'rgba(180,200,255,0)');
+      ctx.fillStyle = mhalo;
+      ctx.fillRect(moonX - 140, moonY - 140, 280, 280);
+      ctx.fillStyle = '#eef2ff';
+      ctx.beginPath(); ctx.arc(moonX, moonY, 28, 0, 6.283); ctx.fill();
+      ctx.fillStyle = 'rgba(180,195,225,0.5)';
+      ctx.beginPath(); ctx.arc(moonX - 9, moonY - 6, 5, 0, 6.283); ctx.fill();
+      ctx.beginPath(); ctx.arc(moonX + 7, moonY + 8, 3.5, 0, 6.283); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    return { sunX: elevation >= moonElevation ? sunX : moonX, sunY: elevation >= moonElevation ? sunY : moonY };
+  }
+
+  // ---------- Çizim: Su ----------
+  function drawWater(t, sun) {
+    const step = 3; // örnekleme yoğunluğu (detay)
+    // su gövdesi gradyanı
+    const wg = ctx.createLinearGradient(0, baseLevel - 30, 0, H);
+    wg.addColorStop(0, 'rgba(120, 200, 230, 0.95)');
+    wg.addColorStop(0.08, '#2a8fc0');
+    wg.addColorStop(0.4, '#0d5a8f');
+    wg.addColorStop(1, '#04243f');
+
+    // yüzey yolu
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    let firstY = surfaceY(0, t);
+    ctx.lineTo(0, firstY);
+    const surfPts = [];
+    for (let x = 0; x <= W; x += step) {
+      const y = surfaceY(x, t);
+      surfPts.push(y);
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fillStyle = wg;
+    ctx.fill();
+
+    // güneş yansıması (sütun ışığı, dalgalara göre kırılan)
+    ctx.save();
+    ctx.clip();
+    const refGrad = ctx.createLinearGradient(0, baseLevel, 0, H);
+    refGrad.addColorStop(0, 'rgba(255,225,170,0.5)');
+    refGrad.addColorStop(0.5, 'rgba(255,200,140,0.12)');
+    refGrad.addColorStop(1, 'rgba(255,200,140,0)');
+    ctx.fillStyle = refGrad;
+    for (let y = baseLevel; y < H; y += 4) {
+      const wob = Math.sin(y * 0.15 + t * 3) * (8 + (y - baseLevel) * 0.08);
+      const width = 60 + (y - baseLevel) * 0.5;
+      ctx.globalAlpha = Math.max(0, 0.5 - (y - baseLevel) / (H - baseLevel) * 0.5);
+      ctx.fillRect(sun.sunX - width / 2 + wob, y, width, 3);
+    }
+    ctx.globalAlpha = 1;
+
+    // su altı ışık huzmeleri (caustics hissi)
+    ctx.globalCompositeOperation = 'screen';
+    for (let i = 0; i < 6; i++) {
+      const cx = (i / 6) * W + Math.sin(t * 0.5 + i) * 40;
+      const cg = ctx.createLinearGradient(cx, baseLevel, cx + 80, H);
+      cg.addColorStop(0, 'rgba(140,220,255,0.06)');
+      cg.addColorStop(1, 'rgba(140,220,255,0)');
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.moveTo(cx, baseLevel);
+      ctx.lineTo(cx + 50, baseLevel);
+      ctx.lineTo(cx + 200, H);
+      ctx.lineTo(cx - 100, H);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+
+    // yüzey parlaklık çizgisi + köpük (dalga tepelerinde)
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(220,245,255,0.55)';
+    ctx.beginPath();
+    for (let idx = 0; idx < surfPts.length; idx++) {
+      const x = idx * step;
+      const y = surfPts[idx];
+      if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // köpük noktaları: hızlı düşen sütunlarda
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let i = 1; i < cols - 1; i++) {
+      const slope = Math.abs(height[i + 1] - height[i - 1]);
+      const speed = Math.abs(vel[i]);
+      if (slope + speed > 3.2) {
+        const x = i * COL_W;
+        const y = surfaceY(x, t);
+        ctx.globalAlpha = Math.min(0.85, (slope + speed) / 12);
+        ctx.beginPath();
+        ctx.arc(x, y, 1.5 + Math.random() * 1.5, 0, 6.283);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Çizim: Gemi ----------
+  function drawShip() {
+    if (ship.state === 'wrecked' || ship.state === 'melted') return;
+    ctx.save();
+    ctx.translate(ship.x, ship.y);
+    ctx.rotate(ship.angle);
+
+    const w = ship.w, h = ship.h;
+    const melt = ship.state === 'melting' ? ship.meltT : 0;
+
+    // yansıma (suya) — geminin solgun aynası
+    ctx.save();
+    ctx.globalAlpha = 0.16 * (1 - melt * 0.5);
+    ctx.scale(1, -1);
+    ctx.translate(0, -h * 1.6);
+    drawHull(w, h, true);
+    ctx.restore();
+
+    // gövde gölgesi (su altı)
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#021a30';
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.4, w * 0.55, h * 0.5, 0, 0, 6.283);
+    ctx.fill();
+    ctx.restore();
+
+    if (melt > 0) {
+      // asitle erirken: aşağı doğru sıkışma + solma + yeşil aşındırma katmanı
+      ctx.save();
+      ctx.globalAlpha = 1 - melt * 0.5;
+      ctx.scale(1 + melt * 0.15, 1 - melt * 0.65);
+      ctx.translate(0, melt * h * 0.5);
+      drawHull(w, h, false);
+      if (melt < 0.6) drawMastAndSails(w, h);
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = `rgba(90,220,60,${0.25 + melt * 0.5})`;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.5, -h * 0.18);
+      ctx.lineTo(w * 0.5, -h * 0.18);
+      ctx.quadraticCurveTo(w * 0.62, h * 0.2, w * 0.36, h * 0.78);
+      ctx.quadraticCurveTo(0, h * 1.0, -w * 0.36, h * 0.78);
+      ctx.quadraticCurveTo(-w * 0.62, h * 0.2, -w * 0.5, -h * 0.18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    } else {
+      drawHull(w, h, false);
+      drawMastAndSails(w, h);
+    }
+
+    ctx.restore();
+  }
+
+  function drawHull(w, h, flat) {
+    // ahşap gövde gradyanı
+    const hg = ctx.createLinearGradient(0, -h * 0.2, 0, h * 0.9);
+    if (flat) {
+      hg.addColorStop(0, '#5a3d23'); hg.addColorStop(1, '#2c1c10');
+    } else {
+      hg.addColorStop(0, '#c98a4b');
+      hg.addColorStop(0.4, '#8a5a30');
+      hg.addColorStop(1, '#4a2f18');
+    }
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, -h * 0.18);
+    ctx.lineTo(w * 0.5, -h * 0.18);
+    ctx.quadraticCurveTo(w * 0.62, h * 0.2, w * 0.36, h * 0.78);
+    ctx.quadraticCurveTo(0, h * 1.0, -w * 0.36, h * 0.78);
+    ctx.quadraticCurveTo(-w * 0.62, h * 0.2, -w * 0.5, -h * 0.18);
+    ctx.closePath();
+    ctx.fill();
+
+    if (flat) return;
+
+    // gövde tahta çizgileri
+    ctx.strokeStyle = 'rgba(40,24,12,0.5)';
+    ctx.lineWidth = 1.4;
+    for (let j = 1; j <= 3; j++) {
+      const yy = -h * 0.18 + (h * 1.0) * (j / 4);
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.5 + j * 3, yy);
+      ctx.quadraticCurveTo(0, yy + h * 0.18, w * 0.5 - j * 3, yy);
+      ctx.stroke();
+    }
+
+    // güverte şeridi (üst parlak kenar)
+    const deck = ctx.createLinearGradient(0, -h * 0.22, 0, -h * 0.05);
+    deck.addColorStop(0, '#f0d9a8'); deck.addColorStop(1, '#b6863f');
+    ctx.fillStyle = deck;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, -h * 0.18);
+    ctx.lineTo(w * 0.5, -h * 0.18);
+    ctx.lineTo(w * 0.46, -h * 0.05);
+    ctx.lineTo(-w * 0.46, -h * 0.05);
+    ctx.closePath();
+    ctx.fill();
+
+    // altın şerit
+    ctx.strokeStyle = '#ffd86b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, -h * 0.05);
+    ctx.quadraticCurveTo(0, h * 0.05, w * 0.5, -h * 0.05);
+    ctx.stroke();
+
+    // lombozlar (pencereler)
+    ctx.fillStyle = '#1b2a3a';
+    for (let p = -1; p <= 1; p++) {
+      ctx.beginPath();
+      ctx.arc(p * w * 0.22, h * 0.28, 4.2, 0, 6.283);
+      ctx.fill();
+      ctx.strokeStyle = '#ffd86b'; ctx.lineWidth = 1.4; ctx.stroke();
+    }
+  }
+
+  function drawMastAndSails(w, h) {
+    // direk
+    ctx.strokeStyle = '#3a2614';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.18);
+    ctx.lineTo(0, -h * 2.4);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath(); // seren
+    ctx.moveTo(-w * 0.3, -h * 1.7);
+    ctx.lineTo(w * 0.3, -h * 1.7);
+    ctx.stroke();
+
+    // ana yelken (rüzgârla şişen)
+    const billow = Math.sin(timeNow * 1.2) * 6 + parseFloat(windEl.value) * 10;
+    const sg = ctx.createLinearGradient(-w * 0.3, 0, w * 0.35, 0);
+    sg.addColorStop(0, '#fdf6e3'); sg.addColorStop(0.5, '#f3e7c4'); sg.addColorStop(1, '#d9c79a');
+    ctx.fillStyle = sg;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 2.35);
+    ctx.quadraticCurveTo(w * 0.32 + billow, -h * 1.6, w * 0.26 + billow * 0.6, -h * 0.7);
+    ctx.quadraticCurveTo(w * 0.1, -h * 0.55, 0, -h * 0.6);
+    ctx.closePath();
+    ctx.fill();
+    // yelken gölgesi
+    ctx.strokeStyle = 'rgba(150,120,70,0.4)'; ctx.lineWidth = 1;
+    for (let s = 1; s <= 3; s++) {
+      ctx.beginPath();
+      ctx.moveTo(0, -h * 2.35 + (h * 1.75) * (s / 4));
+      ctx.quadraticCurveTo(w * 0.2 + billow * 0.6, -h * 1.4 + (h * 0.7) * (s / 4), w * 0.22 + billow * 0.5, -h * 0.7 + (h * 0.1) * (s / 4));
+      ctx.stroke();
+    }
+
+    // küçük üçgen yelken (ön)
+    ctx.fillStyle = '#fdf6e3';
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 2.3);
+    ctx.quadraticCurveTo(-w * 0.28 - billow * 0.5, -h * 1.7, -w * 0.22, -h * 0.9);
+    ctx.lineTo(0, -h * 1.0);
+    ctx.closePath();
+    ctx.fill();
+
+    // bayrak
+    const flagW = 26 + Math.sin(timeNow * 4) * 4;
+    ctx.fillStyle = '#d6334a';
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 2.4);
+    ctx.lineTo(flagW, -h * 2.4 + 4 + Math.sin(timeNow * 5) * 3);
+    ctx.lineTo(0, -h * 2.18);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ---------- Parçacık çizimi ----------
+  function drawParticles() {
+    for (const p of particles) {
+      const lifeT = Math.max(0, p.life);
+      const alpha = lifeT * lifeT * 0.85 + 0.05;   // yumuşak kayboluş (ease-out)
+      const rad = p.r * (0.55 + lifeT * 0.5);
+      const speed = Math.hypot(p.vx, p.vy);
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (speed > 1.1) {
+        // hareket yönünde gerilme: damlaya akıcı, "kaliteli" bir his verir
+        ctx.rotate(Math.atan2(p.vy, p.vx));
+        ctx.scale(Math.min(2.3, 1 + speed * 0.09), 1);
+      }
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.kind === 'acid'
+        ? (p.foam ? '#d4ff8a' : 'rgba(140,255,90,0.92)')
+        : (p.foam ? '#ffffff' : 'rgba(195,235,255,0.95)');
+      ctx.beginPath();
+      ctx.arc(0, 0, rad, 0, 6.283);
+      ctx.fill();
+
+      // büyük damlalara parlak vurgu (speküler highlight)
+      if (rad > 1.7) {
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.fillStyle = p.kind === 'acid' ? 'rgba(220,255,170,0.9)' : 'rgba(255,255,255,0.95)';
+        ctx.beginPath();
+        ctx.arc(-rad * 0.3, -rad * 0.3, rad * 0.32, 0, 6.283);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Sıçrama parıltısı (impact flash) ----------
+  const flashes = [];
+  function spawnImpactFlash(x, y, scale = 1, color = null) {
+    flashes.push({ x, y, life: 1, scale, color });
+  }
+  function updateFlashes(dt) {
+    for (let k = flashes.length - 1; k >= 0; k--) {
+      flashes[k].life -= 0.065 * dt;
+      if (flashes[k].life <= 0) flashes.splice(k, 1);
+    }
+  }
+  function drawFlashes(t) {
+    for (const f of flashes) {
+      const y = surfaceY(f.x, t);
+      const r = (34 + 70 * (1 - f.life)) * f.scale;
+      const g = ctx.createRadialGradient(f.x, y, 0, f.x, y, r);
+      if (f.color === 'acid') {
+        g.addColorStop(0, `rgba(200,255,140,${0.6 * f.life})`);
+        g.addColorStop(0.45, `rgba(120,230,80,${0.32 * f.life})`);
+        g.addColorStop(1, 'rgba(120,230,80,0)');
+      } else {
+        g.addColorStop(0, `rgba(255,255,255,${0.6 * f.life})`);
+        g.addColorStop(0.45, `rgba(215,245,255,${0.3 * f.life})`);
+        g.addColorStop(1, 'rgba(215,245,255,0)');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(f.x, y, r, r * 0.5, 0, 0, 6.283);
+      ctx.fill();
+    }
+  }
+
+  // ---------- Savaş modu ----------
+  const ENEMY_WIDTH_SCALE = 1.6;
+  const ENEMY_SPEED_SCALE = 0.45;
+  const WAR_SHIPS = [
+    { id: 'firkateyn', name: 'Fırkateyn', material: 'wood',
+      hullLight: '#c98a4b', hullDark: '#5c3a1e', deck: '#3a2614', trim: '#ffd86b',
+      hp: 100, speed: 7, fireRate: 0.9, dmg: 12 },
+    { id: 'korvet', name: 'Korvet', material: 'iron',
+      hullLight: '#94a3b8', hullDark: '#2c3641', deck: '#1e293b', trim: '#cbd5e1',
+      hp: 90, speed: 9, fireRate: 0.7, dmg: 9 },
+    { id: 'zirhli', name: 'Zırhlı', material: 'iron',
+      hullLight: '#4f7a55', hullDark: '#16231a', deck: '#0d1b10', trim: '#9bbf9f',
+      hp: 130, speed: 5, fireRate: 1.3, dmg: 16 },
+  ];
+
+  const battle = {
+    active: false, frozen: false, result: null, shipDef: null, maxHP: 100,
+    playerX: 0, enemyX: 0, playerHP: 0, enemyHP: 0,
+    enemyDir: 1, enemyChangeT: 1,
+    playerCooldown: 0, enemyCooldown: 0,
+    playerBullets: [], enemyBullets: [], hits: [],
+    keys: { a: false, d: false },
+  };
+
+  const shipSelectMenu = document.getElementById('shipSelectMenu');
+  const shipChoicesEl = document.getElementById('shipChoices');
+  const battleHud = document.getElementById('battleHud');
+  const battleResult = document.getElementById('battleResult');
+  const battleResultTitle = document.getElementById('battleResultTitle');
+  const playerHpFill = document.getElementById('playerHpFill');
+  const enemyHpFill = document.getElementById('enemyHpFill');
+  const playerHpText = document.getElementById('playerHpText');
+  const enemyHpText = document.getElementById('enemyHpText');
+
+  WAR_SHIPS.forEach((sd) => {
+    const card = document.createElement('div');
+    card.className = 'ship-card';
+    card.innerHTML = `<div class="swatch" style="background:linear-gradient(135deg, ${sd.hullLight}, ${sd.hullDark})"></div>` +
+      `<div class="name">${sd.name}</div>` +
+      `<div class="stats">❤️ ${sd.hp} · 🚀 ${sd.speed} · 💣 ${sd.fireRate}s</div>`;
+    card.addEventListener('click', () => {
+      closeShipSelect();
+      startBattle(sd);
+    });
+    shipChoicesEl.appendChild(card);
+  });
+
+  function openShipSelect() { shipSelectMenu.classList.remove('hidden'); }
+  function closeShipSelect() { shipSelectMenu.classList.add('hidden'); }
+
+  function updateHpUI() {
+    const max = battle.maxHP || 1;
+    const pPct = Math.max(0, battle.playerHP / max * 100);
+    const ePct = Math.max(0, battle.enemyHP / max * 100);
+    playerHpFill.style.width = pPct + '%';
+    enemyHpFill.style.width = ePct + '%';
+    playerHpText.textContent = Math.round(Math.max(0, battle.playerHP));
+    enemyHpText.textContent = Math.round(Math.max(0, battle.enemyHP));
+  }
+
+  function startBattle(shipDef) {
+    ensureAudio();
+    battle.shipDef = shipDef;
+    battle.maxHP = shipDef.hp;
+    battle.playerHP = shipDef.hp;
+    battle.enemyHP = shipDef.hp;
+    battle.playerX = W * 0.5;
+    battle.enemyX = W * 0.5;
+    battle.enemyDir = Math.random() < 0.5 ? -1 : 1;
+    battle.enemyChangeT = 0.8 + Math.random() * 1.6;
+    battle.playerBullets.length = 0;
+    battle.enemyBullets.length = 0;
+    battle.hits.length = 0;
+    battle.playerCooldown = 0;
+    battle.enemyCooldown = 40 + Math.random() * 60;
+    battle.result = null;
+    battle.frozen = false;
+    battle.active = true;
+    document.body.classList.add('battle-mode');
+    battleHud.classList.remove('hidden');
+    battleResult.classList.add('hidden');
+    updateHpUI();
+  }
+
+  function endBattle(result) {
+    battle.result = result;
+    battle.frozen = true;
+    if (result === 'win') { playReset(); } else { playWreck(); }
+    battleResultTitle.textContent = result === 'win' ? '🏆 Kazandın!' : '💀 Kaybettin!';
+    battleResult.classList.remove('hidden');
+  }
+
+  function exitBattle() {
+    battle.active = false;
+    battle.frozen = false;
+    document.body.classList.remove('battle-mode');
+    battleHud.classList.add('hidden');
+    battleResult.classList.add('hidden');
+  }
+
+  function fireBattlePlayerCannon() {
+    if (!battle.active || battle.frozen || battle.playerCooldown > 0) return;
+    const sd = battle.shipDef;
+    battle.playerCooldown = sd.fireRate * 60;
+    battle.playerBullets.push({ x: battle.playerX, y: H * 0.82 - 30, vy: -14 });
+    playCannon();
+  }
+
+  function updateBattle(dt) {
+    if (battle.frozen) return;
+    const sd = battle.shipDef;
+    const margin = 50;
+
+    let vx = 0;
+    if (battle.keys.d) vx += sd.speed;
+    if (battle.keys.a) vx -= sd.speed;
+    battle.playerX = Math.max(margin, Math.min(W - margin, battle.playerX + vx * dt * 1.1));
+
+    battle.enemyChangeT -= dt * 0.016;
+    if (battle.enemyChangeT <= 0) {
+      battle.enemyDir = Math.random() < 0.5 ? -1 : 1;
+      battle.enemyChangeT = 0.8 + Math.random() * 1.6;
+    }
+    battle.enemyX += battle.enemyDir * sd.speed * ENEMY_SPEED_SCALE * dt * 1.1;
+    if (battle.enemyX < margin) { battle.enemyX = margin; battle.enemyDir = 1; }
+    if (battle.enemyX > W - margin) { battle.enemyX = W - margin; battle.enemyDir = -1; }
+
+    if (battle.playerCooldown > 0) battle.playerCooldown -= dt;
+    battle.enemyCooldown -= dt;
+    if (battle.enemyCooldown <= 0) {
+      battle.enemyCooldown = sd.fireRate * 60 * (0.8 + Math.random() * 0.7);
+      battle.enemyBullets.push({ x: battle.enemyX, y: H * 0.16 + 30, vy: 13 });
+      playCannon();
+    }
+
+    const playerY = H * 0.82, enemyY = H * 0.16, hitR = 26, enemyHitR = 26 * ENEMY_WIDTH_SCALE;
+
+    for (let i = battle.playerBullets.length - 1; i >= 0; i--) {
+      const b = battle.playerBullets[i];
+      b.y += b.vy * dt;
+      if (b.y <= enemyY + 10 && Math.abs(b.x - battle.enemyX) < enemyHitR) {
+        battle.enemyHP = Math.max(0, battle.enemyHP - sd.dmg);
+        battle.hits.push({ x: b.x, y: enemyY, life: 1 });
+        playSplash(22);
+        battle.playerBullets.splice(i, 1);
+        updateHpUI();
+        if (battle.enemyHP <= 0) { endBattle('win'); return; }
+        continue;
+      }
+      if (b.y < -20) battle.playerBullets.splice(i, 1);
+    }
+    for (let i = battle.enemyBullets.length - 1; i >= 0; i--) {
+      const b = battle.enemyBullets[i];
+      b.y += b.vy * dt;
+      if (b.y >= playerY - 10 && Math.abs(b.x - battle.playerX) < hitR) {
+        battle.playerHP = Math.max(0, battle.playerHP - sd.dmg);
+        battle.hits.push({ x: b.x, y: playerY, life: 1 });
+        playSplash(22);
+        battle.enemyBullets.splice(i, 1);
+        updateHpUI();
+        if (battle.playerHP <= 0) { endBattle('lose'); return; }
+        continue;
+      }
+      if (b.y > H + 20) battle.enemyBullets.splice(i, 1);
+    }
+
+    for (let i = battle.hits.length - 1; i >= 0; i--) {
+      battle.hits[i].life -= dt * 0.08;
+      if (battle.hits[i].life <= 0) battle.hits.splice(i, 1);
+    }
+  }
+
+  function drawWarShipTopDown(x, y, shipDef, dir, widthScale = 1) {
+    const w = 38 * widthScale, l = 84;
+    ctx.save();
+    ctx.translate(x, y);
+    if (dir === -1) ctx.rotate(Math.PI);
+
+    const hullPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(0, -l * 0.5);
+      ctx.quadraticCurveTo(w * 0.5, -l * 0.28, w * 0.47, l * 0.3);
+      ctx.quadraticCurveTo(w * 0.42, l * 0.5, 0, l * 0.5);
+      ctx.quadraticCurveTo(-w * 0.42, l * 0.5, -w * 0.47, l * 0.3);
+      ctx.quadraticCurveTo(-w * 0.5, -l * 0.28, 0, -l * 0.5);
+      ctx.closePath();
+    };
+
+    // su altı gölge / iz
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#021a30';
+    ctx.beginPath();
+    ctx.ellipse(0, l * 0.08, w * 0.62, l * 0.56, 0, 0, 6.283);
+    ctx.fill();
+    ctx.restore();
+
+    // gövde — enine gradyan (3 boyut hissi)
+    const hg = ctx.createLinearGradient(-w * 0.5, 0, w * 0.5, 0);
+    hg.addColorStop(0, shipDef.hullDark);
+    hg.addColorStop(0.45, shipDef.hullLight);
+    hg.addColorStop(0.55, shipDef.hullLight);
+    hg.addColorStop(1, shipDef.hullDark);
+    hullPath();
+    ctx.fillStyle = hg;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.save();
+    hullPath();
+    ctx.clip();
+    if (shipDef.material === 'wood') {
+      // tahta kaplama şeritleri
+      ctx.strokeStyle = 'rgba(30,16,8,0.35)';
+      ctx.lineWidth = 1.2;
+      for (let j = -4; j <= 4; j++) {
+        const yy = j * (l / 10);
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.5, yy);
+        ctx.lineTo(w * 0.5, yy);
+        ctx.stroke();
+      }
+    } else {
+      // metal perçinler
+      ctx.fillStyle = 'rgba(20,20,24,0.5)';
+      for (let j = -3; j <= 3; j++) {
+        for (const side of [-0.4, 0.4]) {
+          ctx.beginPath();
+          ctx.arc(side * w, j * (l / 8), 1.4, 0, 6.283);
+          ctx.fill();
+        }
+      }
+      // metalik parlama şeridi
+      const shine = ctx.createLinearGradient(-w * 0.5, 0, w * 0.5, 0);
+      shine.addColorStop(0, 'rgba(255,255,255,0)');
+      shine.addColorStop(0.4, 'rgba(255,255,255,0.28)');
+      shine.addColorStop(0.55, 'rgba(255,255,255,0)');
+      ctx.fillStyle = shine;
+      ctx.fillRect(-w * 0.5, -l * 0.5, w, l);
+    }
+    ctx.restore();
+
+    // güverte (orta şerit)
+    ctx.fillStyle = shipDef.deck;
+    ctx.beginPath();
+    ctx.rect(-w * 0.2, -l * 0.32, w * 0.4, l * 0.64);
+    ctx.fill();
+
+    // gövde kenar şeridi
+    ctx.strokeStyle = shipDef.trim;
+    ctx.lineWidth = 1.4;
+    hullPath();
+    ctx.stroke();
+
+    // yan toplar
+    ctx.fillStyle = '#15171a';
+    for (const side of [-1, 1]) {
+      for (let k = -1; k <= 1; k++) {
+        ctx.beginPath();
+        ctx.rect(side * w * 0.48 - 2, k * l * 0.2 - 3, 4, 7);
+        ctx.fill();
+      }
+    }
+
+    // pruva topu (ön top namlusu)
+    ctx.fillStyle = '#15171a';
+    ctx.beginPath();
+    ctx.rect(-2.6, -l * 0.5 - 7, 5.2, 14);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+
+    // kaptan köşkü / direk tabanı
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, 6.283);
+    ctx.fillStyle = '#1f2937';
+    ctx.fill();
+    ctx.strokeStyle = shipDef.trim; ctx.lineWidth = 1; ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawBattleScene() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0b2a4a');
+    g.addColorStop(0.5, '#08203b');
+    g.addColorStop(1, '#0b2a4a');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(252,165,165,0.25)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 10]);
+    ctx.beginPath();
+    ctx.moveTo(0, H * 0.5);
+    ctx.lineTo(W, H * 0.5);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(125,211,252,0.08)';
+    ctx.lineWidth = 1;
+    const step = H / 18;
+    for (let i = 0; i < 18; i++) {
+      const y = (i * step + timeNow * 18) % H;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+    }
+
+    const sd = battle.shipDef;
+    drawWarShipTopDown(battle.enemyX, H * 0.16, sd, -1, ENEMY_WIDTH_SCALE);
+    drawWarShipTopDown(battle.playerX, H * 0.82, sd, 1);
+
+    ctx.fillStyle = '#fde68a';
+    for (const b of battle.playerBullets) { ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, 6.283); ctx.fill(); }
+    ctx.fillStyle = '#fca5a5';
+    for (const b of battle.enemyBullets) { ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, 6.283); ctx.fill(); }
+
+    for (const h of battle.hits) {
+      ctx.strokeStyle = `rgba(255,210,120,${h.life})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(h.x, h.y, 26 * (1.3 - h.life), 0, 6.283);
+      ctx.stroke();
+    }
+  }
+
+  document.getElementById('warBtn').addEventListener('click', () => { ensureAudio(); openShipSelect(); });
+  document.getElementById('cancelShipSelect').addEventListener('click', closeShipSelect);
+  document.getElementById('battleRetry').addEventListener('click', () => { startBattle(battle.shipDef); });
+  document.getElementById('battleExit').addEventListener('click', exitBattle);
+  document.getElementById('battleQuit').addEventListener('click', exitBattle);
+  document.getElementById('krakenBtn').addEventListener('click', () => { if (!battle.active) startKrakenBattle(); });
+  document.getElementById('krakenQuit').addEventListener('click', exitKrakenBattle);
+  document.getElementById('krakenExit').addEventListener('click', exitKrakenBattle);
+  document.getElementById('krakenRetry').addEventListener('click', startKrakenBattle);
+  document.getElementById('krakenFireBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); fireKrakenCannon(); });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') battle.keys.a = true;
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') battle.keys.d = true;
+    if (e.code === 'Space') {
+      fireBattlePlayerCannon();
+      fireKrakenCannon();
+      if (battle.active || krakenBoss.active) e.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') battle.keys.a = false;
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') battle.keys.d = false;
+  });
+
+  // ---------- Savaş modu dokunmatik kontroller ----------
+  function bindHoldButton(el, onDownFn, onUpFn) {
+    const start = (e) => { e.preventDefault(); onDownFn(); };
+    const end = (e) => { e.preventDefault(); onUpFn(); };
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointerleave', end);
+    el.addEventListener('pointercancel', end);
+  }
+  bindHoldButton(document.getElementById('bcLeft'), () => { battle.keys.a = true; }, () => { battle.keys.a = false; });
+  bindHoldButton(document.getElementById('bcRight'), () => { battle.keys.d = true; }, () => { battle.keys.d = false; });
+  document.getElementById('bcFire').addEventListener('pointerdown', (e) => { e.preventDefault(); fireBattlePlayerCannon(); });
+
+  // ---------- Kraken Boss Modu ----------
+  const CANNON_TYPES = [
+    { id: 'plasma', label: 'Plasma', icon: '🟣', dmg: 250, color: '#c084fc' },
+    { id: 'flame', label: 'Alevli', icon: '🔥', dmg: 200, color: '#ef4444', dotPerTick: 5, dotTicks: 5, dotColor: '#fb923c' },
+    { id: 'ice', label: 'Buz', icon: '❄️', dmg: 220, color: '#7dd3fc', freeze: 2 },
+    { id: 'normal', label: 'Normal', icon: '⚫', dmg: 230, color: '#e5e7eb' },
+    { id: 'spark', label: 'Kıvılcım', icon: '⚡', dmg: 225, color: '#facc15', sparkDmg: 15, sparkColor: '#fde047' },
+  ];
+
+  const krakenBoss = {
+    active: false, result: null, frozen: false,
+    x: 0, y: 0, t: 0,
+    hp: 5000, maxHp: 5000,
+    shipHp: 2000, maxShipHp: 2000,
+    phase: 'idle', phaseT: 0, attackTimer: 4.5,
+    freezeT: 0, freezeImmuneT: 0,
+    grabArmIdx: 0,
+    arms: [], dots: [],
+    cannon: 'normal',
+    cooldown: 0,
+    cannonballs: [],
+    floatingTexts: [],
+    piranha: { timer: 4, phase: 'idle', phaseT: 0, fish: [], cx: 0 },
+    stork: { armed: false, fired: false, phase: 'idle', phaseT: 0, triggerT: 0, x: 0, y: 0, wingPhase: 0 },
+  };
+  const PIRANHA_COUNT = 12;
+  const PIRANHA_DMG = 400;
+  const PIRANHA_INTERVAL = 4;
+  const STORK_CHANCE = 0.7;
+  const STORK_DMG = 450;
+
+  const cannonTabEl = document.getElementById('cannonTab');
+  const krakenHud = document.getElementById('krakenHud');
+  const krakenShipHpFill = document.getElementById('krakenShipHpFill');
+  const krakenBossHpFill = document.getElementById('krakenBossHpFill');
+  const krakenShipHpText = document.getElementById('krakenShipHpText');
+  const krakenBossHpText = document.getElementById('krakenBossHpText');
+  const krakenResult = document.getElementById('krakenResult');
+  const krakenResultTitle = document.getElementById('krakenResultTitle');
+
+  CANNON_TYPES.forEach((c) => {
+    const opt = document.createElement('div');
+    opt.className = 'cannon-opt' + (c.id === krakenBoss.cannon ? ' selected' : '');
+    opt.dataset.id = c.id;
+    opt.innerHTML = `<span class="ic">${c.icon}</span><span class="lb">${c.label}</span>`;
+    opt.addEventListener('click', () => {
+      krakenBoss.cannon = c.id;
+      cannonTabEl.querySelectorAll('.cannon-opt').forEach((el) => el.classList.toggle('selected', el.dataset.id === c.id));
+    });
+    cannonTabEl.appendChild(opt);
+  });
+
+  function getCannonDef() { return CANNON_TYPES.find((c) => c.id === krakenBoss.cannon) || CANNON_TYPES[3]; }
+
+  function updateKrakenHpUI() {
+    const sp = Math.max(0, krakenBoss.shipHp / krakenBoss.maxShipHp * 100);
+    const bp = Math.max(0, krakenBoss.hp / krakenBoss.maxHp * 100);
+    krakenShipHpFill.style.width = sp + '%';
+    krakenBossHpFill.style.width = bp + '%';
+    krakenShipHpText.textContent = Math.round(Math.max(0, krakenBoss.shipHp));
+    krakenBossHpText.textContent = Math.round(Math.max(0, krakenBoss.hp));
+  }
+
+  function startKrakenBattle() {
+    ensureAudio();
+    if (battle.active) return;
+    krakenBoss.hp = krakenBoss.maxHp;
+    krakenBoss.shipHp = krakenBoss.maxShipHp;
+    krakenBoss.x = W * 0.78; krakenBoss.y = baseLevel - 10;
+    krakenBoss.t = 0;
+    krakenBoss.phase = 'idle'; krakenBoss.phaseT = 0; krakenBoss.attackTimer = 4.5;
+    krakenBoss.freezeT = 0;
+    krakenBoss.freezeImmuneT = 0;
+    krakenBoss.cooldown = 0;
+    krakenBoss.cannonballs.length = 0;
+    krakenBoss.floatingTexts.length = 0;
+    krakenBoss.dots.length = 0;
+    krakenBoss.result = null;
+    krakenBoss.frozen = false;
+    krakenBoss.piranha.timer = PIRANHA_INTERVAL;
+    krakenBoss.piranha.phase = 'idle';
+    krakenBoss.piranha.phaseT = 0;
+    krakenBoss.piranha.fish.length = 0;
+    krakenBoss.stork.armed = Math.random() < STORK_CHANCE;
+    krakenBoss.stork.fired = false;
+    krakenBoss.stork.phase = 'idle';
+    krakenBoss.stork.phaseT = 0;
+    krakenBoss.stork.triggerT = 3 + Math.random() * 8;
+    krakenBoss.arms = [];
+    const n = 20;
+    for (let i = 0; i < n; i++) {
+      krakenBoss.arms.push({
+        baseAngle: (i / n) * 6.283,
+        len: 130 + Math.random() * 90,
+        phase: Math.random() * 6.283,
+        speed: 0.8 + Math.random() * 1.0,
+        sway: 10 + Math.random() * 14,
+      });
+    }
+    krakenBoss.grabArmIdx = Math.floor(Math.random() * n);
+    krakenBoss.active = true;
+    resetShip();
+    ship.x = W * 0.28; ship.y = baseLevel - 40;
+    document.body.classList.add('kraken-mode');
+    krakenHud.classList.remove('hidden');
+    krakenResult.classList.add('hidden');
+    updateKrakenHpUI();
+    playKraken();
+  }
+
+  function endKrakenBattle(result) {
+    krakenBoss.result = result;
+    krakenBoss.frozen = true;
+    krakenBoss.floatingTexts.length = 0;
+    krakenBoss.dots.length = 0;
+    krakenBoss.cannonballs.length = 0;
+    krakenBoss.piranha.fish.length = 0;
+    krakenBoss.piranha.phase = 'idle';
+    krakenBoss.piranha.phaseT = 0;
+    krakenBoss.stork.phase = 'idle';
+    krakenBoss.stork.phaseT = 0;
+    if (result === 'win') { playReset(); } else { playWreck(); }
+    krakenResultTitle.textContent = result === 'win' ? '🏆 Krakeni Yendin!' : '💀 Gemin Battı!';
+    krakenResult.classList.remove('hidden');
+  }
+
+  function exitKrakenBattle() {
+    krakenBoss.active = false;
+    krakenBoss.frozen = false;
+    krakenBoss.phase = 'idle';
+    krakenBoss.floatingTexts.length = 0;
+    krakenBoss.dots.length = 0;
+    krakenBoss.cannonballs.length = 0;
+    krakenBoss.piranha.fish.length = 0;
+    krakenBoss.piranha.phase = 'idle';
+    krakenBoss.piranha.phaseT = 0;
+    krakenBoss.stork.phase = 'idle';
+    krakenBoss.stork.phaseT = 0;
+    document.body.classList.remove('kraken-mode');
+    krakenHud.classList.add('hidden');
+    krakenResult.classList.add('hidden');
+    resetShip();
+  }
+
+  function spawnFloatText(x, y, text, color, big) {
+    krakenBoss.floatingTexts.push({
+      x, y, text, color,
+      vx: (Math.random() - 0.5) * 0.6, vy: -0.9 - Math.random() * 0.5,
+      life: 1, big: !!big,
+    });
+  }
+
+  function krakenHeadPos() { return { x: krakenBoss.x, y: krakenBoss.y }; }
+
+  function applyKrakenDamage(amount, color, big) {
+    krakenBoss.hp -= amount;
+    const head = krakenHeadPos();
+    const fx = head.x + (Math.random() - 0.5) * 70;
+    const fy = head.y - 30 - Math.random() * 50;
+    spawnFloatText(fx, fy, '-' + Math.round(amount), color, big);
+    updateKrakenHpUI();
+    if (krakenBoss.hp <= 0 && !krakenBoss.frozen) endKrakenBattle('win');
+  }
+
+  function spawnShipBiteDamage() {
+    const woods = ['#c98a4b', '#8a5a30', '#6e4423', '#a06a38'];
+    for (let i = 0; i < 3; i++) {
+      debris.push({
+        x: ship.x + (Math.random() - 0.5) * ship.w * 0.6,
+        y: ship.y + (Math.random() - 0.5) * ship.h * 0.6,
+        vx: (Math.random() - 0.5) * 5, vy: -2 - Math.random() * 4,
+        w: 10 + Math.random() * 18, h: 4 + Math.random() * 5,
+        angle: Math.random() * 6.28, vAngle: (Math.random() - 0.5) * 0.25,
+        color: woods[i % woods.length], type: 'plank', buoyant: true,
+      });
+    }
+    spawnImpactFlash(ship.x, ship.y, 0.8, '#dc2626');
+  }
+
+  function fireKrakenCannon() {
+    if (!krakenBoss.active || krakenBoss.frozen || krakenBoss.cooldown > 0 || ship.state === 'grabbed') return;
+    krakenBoss.cooldown = 28;
+    const cdef = getCannonDef();
+    const head = krakenHeadPos();
+    const dy = (head.y - ship.y) / Math.max(1, Math.abs(head.x - ship.x) / 14);
+    krakenBoss.cannonballs.push({ x: ship.x, y: ship.y - 16, vx: 14, vy: dy, cdef });
+    playCannon();
+  }
+
+  function resolveCannonHit(cdef) {
+    applyKrakenDamage(cdef.dmg, cdef.color, true);
+    if (cdef.freeze && krakenBoss.freezeT <= 0 && krakenBoss.freezeImmuneT <= 0) krakenBoss.freezeT = cdef.freeze;
+    if (cdef.sparkDmg) applyKrakenDamage(cdef.sparkDmg, cdef.sparkColor, false);
+    if (cdef.dotPerTick) {
+      krakenBoss.dots.push({ ticksLeft: cdef.dotTicks, tickT: 1, dmg: cdef.dotPerTick, color: cdef.dotColor });
+    }
+  }
+
+  const KRAKEN_SHIP_SPEED = 3.2;
+  function updateKrakenBoss(dt) {
+    if (!krakenBoss.active || krakenBoss.frozen) return;
+    krakenBoss.t += dt * 0.016;
+    if (krakenBoss.cooldown > 0) krakenBoss.cooldown -= dt;
+
+    if (ship.state === 'float') {
+      let vx = 0;
+      if (battle.keys.d) vx += KRAKEN_SHIP_SPEED;
+      if (battle.keys.a) vx -= KRAKEN_SHIP_SPEED;
+      if (vx !== 0) {
+        const margin = ship.w * 0.5;
+        ship.x = Math.max(margin, Math.min(W - margin, ship.x + vx * dt * 1.1));
+      }
+    }
+
+    for (let i = krakenBoss.floatingTexts.length - 1; i >= 0; i--) {
+      const ft = krakenBoss.floatingTexts[i];
+      ft.x += ft.vx * dt; ft.y += ft.vy * dt; ft.life -= dt * 0.012;
+      if (ft.life <= 0) krakenBoss.floatingTexts.splice(i, 1);
+    }
+
+    for (let i = krakenBoss.dots.length - 1; i >= 0; i--) {
+      const d = krakenBoss.dots[i];
+      d.tickT -= dt * 0.016;
+      if (d.tickT <= 0) {
+        d.tickT += 1;
+        d.ticksLeft--;
+        if (krakenBoss.hp > 0) applyKrakenDamage(d.dmg, d.color, false);
+      }
+      if (d.ticksLeft <= 0) krakenBoss.dots.splice(i, 1);
+    }
+
+    for (let i = krakenBoss.cannonballs.length - 1; i >= 0; i--) {
+      const b = krakenBoss.cannonballs[i];
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      const head = krakenHeadPos();
+      const dx = b.x - head.x, dy = b.y - head.y;
+      if (Math.sqrt(dx * dx + dy * dy) < 75) {
+        resolveCannonHit(b.cdef);
+        spawnImpactFlash(b.x, b.y, 1, b.cdef.color);
+        krakenBoss.cannonballs.splice(i, 1);
+        continue;
+      }
+      if (b.x > W + 40 || b.x < -40) krakenBoss.cannonballs.splice(i, 1);
+    }
+
+    if (krakenBoss.result) return;
+
+    if (krakenBoss.freezeImmuneT > 0) krakenBoss.freezeImmuneT -= dt * 0.016;
+
+    if (krakenBoss.freezeT > 0) {
+      krakenBoss.freezeT -= dt * 0.016;
+      if (krakenBoss.freezeT <= 0) krakenBoss.freezeImmuneT = 3;
+      return;
+    }
+
+    if (krakenBoss.phase === 'idle') {
+      krakenBoss.attackTimer -= dt * 0.016;
+      if (krakenBoss.attackTimer <= 0 && ship.state === 'float') {
+        krakenBoss.phase = 'reach'; krakenBoss.phaseT = 0;
+        krakenBoss.grabArmIdx = Math.floor(Math.random() * krakenBoss.arms.length);
+        splashAt(ship.x, -10, 5);
+      }
+    } else if (krakenBoss.phase === 'reach') {
+      krakenBoss.phaseT += dt * 0.016;
+      if (krakenBoss.phaseT >= 1) {
+        krakenBoss.phase = 'grab'; krakenBoss.phaseT = 0;
+        ship.state = 'grabbed'; ship.held = false;
+        canvas.classList.remove('dragging');
+        playKraken();
+      }
+    } else if (krakenBoss.phase === 'grab') {
+      krakenBoss.phaseT += dt * 0.016;
+      const head = krakenHeadPos();
+      const tx = head.x - 70, ty = head.y;
+      ship.x += (tx - ship.x) * 0.06;
+      ship.y += (ty - ship.y) * 0.06;
+      ship.vx = 0; ship.vy = 0;
+      ship.angle = Math.sin(krakenBoss.phaseT * 6) * 0.25;
+      if (Math.random() < 0.6) spawnBubble(ship.x + (Math.random() - 0.5) * ship.w, ship.y + (Math.random() - 0.5) * ship.h);
+      if (krakenBoss.phaseT >= 1.4) {
+        krakenBoss.phase = 'bite'; krakenBoss.phaseT = 0;
+        krakenBoss.shipHp -= 350;
+        spawnShipBiteDamage();
+        spawnFloatText(ship.x, ship.y - 40, '-350', '#ef4444', true);
+        updateKrakenHpUI();
+        playWreck();
+        if (krakenBoss.shipHp <= 0) endKrakenBattle('lose');
+      }
+    } else if (krakenBoss.phase === 'bite') {
+      krakenBoss.phaseT += dt * 0.016;
+      if (krakenBoss.phaseT >= 0.5) { krakenBoss.phase = 'release'; krakenBoss.phaseT = 0; }
+    } else if (krakenBoss.phase === 'release') {
+      krakenBoss.phaseT += dt * 0.016;
+      if (krakenBoss.phaseT >= 0.8) {
+        ship.state = 'float';
+        ship.vx = 0; ship.vy = 0;
+        krakenBoss.phase = 'idle'; krakenBoss.phaseT = 0; krakenBoss.attackTimer = 4.5;
+      }
+    }
+  }
+
+  function startPiranhaWave() {
+    const p = krakenBoss.piranha;
+    p.timer = PIRANHA_INTERVAL;
+    p.phase = 'rising';
+    p.phaseT = 0;
+    p.cx = ship.x;
+    p.fish.length = 0;
+    for (let i = 0; i < PIRANHA_COUNT; i++) {
+      const ang = Math.random() * 6.283;
+      const rad = 14 + Math.random() * 34;
+      p.fish.push({
+        ox: Math.cos(ang) * rad,
+        oy: Math.sin(ang) * rad * 0.5,
+        depth: 1,
+        wobble: Math.random() * 6.283,
+        wobSpeed: 3 + Math.random() * 2.5,
+        scale: 0.82 + Math.random() * 0.36,
+        lean: (Math.random() - 0.5) * 0.5,
+        biting: false,
+      });
+    }
+  }
+
+  function updatePiranhaSwarm(dt) {
+    if (!krakenBoss.active || krakenBoss.frozen || krakenBoss.result) return;
+    if (krakenBoss.freezeT > 0) return;
+    const p = krakenBoss.piranha;
+    if (p.phase === 'idle') {
+      p.timer -= dt * 0.016;
+      if (p.timer <= 0 && ship.state === 'float') startPiranhaWave();
+      return;
+    }
+    p.cx = ship.x;
+    p.phaseT += dt * 0.016;
+    const wobMul = p.phase === 'biting' ? 2.4 : 1;
+    for (const f of p.fish) f.wobble += dt * f.wobSpeed * wobMul;
+    if (p.phase === 'rising') {
+      const t = Math.min(1, p.phaseT / 0.9);
+      for (const f of p.fish) f.depth = 1 - t;
+      if (Math.random() < 0.35) spawnBubble(p.cx + (Math.random() - 0.5) * 70, baseLevel - 6);
+      if (t >= 1) {
+        p.phase = 'biting'; p.phaseT = 0;
+        for (const f of p.fish) { f.depth = 0; f.biting = true; }
+        krakenBoss.shipHp -= PIRANHA_DMG;
+        spawnShipBiteDamage();
+        spawnFloatText(p.cx, ship.y - 30, '-' + PIRANHA_DMG, '#f97316', true);
+        updateKrakenHpUI();
+        playPiranhaBite();
+        splashAt(p.cx, 14, 3);
+        if (krakenBoss.shipHp <= 0) endKrakenBattle('lose');
+      }
+    } else if (p.phase === 'biting') {
+      if (p.phaseT >= 0.35) {
+        p.phase = 'leaving'; p.phaseT = 0;
+        for (const f of p.fish) f.biting = false;
+      }
+    } else if (p.phase === 'leaving') {
+      const t = Math.min(1, p.phaseT / 0.9);
+      for (const f of p.fish) f.depth = t;
+      if (t >= 1) {
+        p.phase = 'idle'; p.phaseT = 0;
+        p.fish.length = 0;
+      }
+    }
+  }
+
+  function updateStorkEvent(dt) {
+    if (!krakenBoss.active || krakenBoss.frozen || krakenBoss.result) return;
+    const s = krakenBoss.stork;
+    if (s.phase === 'idle') {
+      if (krakenBoss.freezeT > 0) return;
+      if (!s.armed || s.fired) return;
+      if (krakenBoss.t >= s.triggerT) {
+        s.phase = 'flyIn'; s.phaseT = 0;
+        s.startX = -80; s.startY = 80 + Math.random() * 60;
+        const head = krakenHeadPos();
+        s.targetX = head.x; s.targetY = head.y - 150;
+        s.wingPhase = 0;
+        playStorkCall();
+      }
+      return;
+    }
+    s.phaseT += dt * 0.016;
+    s.wingPhase += dt * 0.45;
+    const head = krakenHeadPos();
+    if (s.phase === 'flyIn') {
+      const t = Math.min(1, s.phaseT / 1.6);
+      s.x = s.startX + (s.targetX - s.startX) * t;
+      s.y = s.startY + (s.targetY - s.startY) * t - Math.sin(t * Math.PI) * 50;
+      if (t >= 1) { s.phase = 'poop'; s.phaseT = 0; }
+    } else if (s.phase === 'poop') {
+      s.x = head.x; s.y = head.y - 150;
+      if (s.phaseT >= 0.5) {
+        applyKrakenDamage(STORK_DMG, '#a3e635', true);
+        playStorkPoop();
+        spawnImpactFlash(head.x, head.y - 60, 0.9, '#a3e635');
+        s.fired = true;
+        s.phase = 'flyOut'; s.phaseT = 0;
+        s.startX = s.x; s.startY = s.y;
+        s.targetX = Math.random() < 0.5 ? -120 : W + 120;
+        s.targetY = s.y - 110;
+      }
+    } else if (s.phase === 'flyOut') {
+      const t = Math.min(1, s.phaseT / 1.4);
+      s.x = s.startX + (s.targetX - s.startX) * t;
+      s.y = s.startY + (s.targetY - s.startY) * t;
+      if (t >= 1) { s.phase = 'idle'; s.phaseT = 0; }
+    }
+  }
+
+  function drawKrakenBossEntity() {
+    if (!krakenBoss.active) return;
+    const head = krakenHeadPos();
+    const isFrozen = krakenBoss.freezeT > 0;
+
+    krakenBoss.arms.forEach((a, idx) => {
+      let tipX, tipY, reach;
+      const isGrabArm = idx === krakenBoss.grabArmIdx &&
+        (krakenBoss.phase === 'reach' || krakenBoss.phase === 'grab' || krakenBoss.phase === 'bite' || krakenBoss.phase === 'release');
+      if (isGrabArm) {
+        if (krakenBoss.phase === 'reach') reach = Math.min(1, krakenBoss.phaseT / 1);
+        else if (krakenBoss.phase === 'release') reach = Math.max(0, 1 - krakenBoss.phaseT / 0.8);
+        else reach = 1;
+        tipX = ship.x; tipY = ship.y;
+      } else {
+        reach = 0.82 + 0.12 * Math.sin(krakenBoss.t * a.speed + a.phase);
+        const ang = a.baseAngle + Math.sin(krakenBoss.t * 0.3 + a.phase) * 0.2;
+        tipX = head.x + Math.cos(ang) * a.len;
+        tipY = head.y + Math.abs(Math.sin(ang)) * a.len * 0.5 + 45;
+      }
+      const ax = head.x + Math.cos(a.baseAngle) * 20;
+      const ay = head.y + Math.sin(a.baseAngle) * 20 + 10;
+      const segs = 10;
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.beginPath();
+        for (let s = 0; s <= segs; s++) {
+          const f = s / segs;
+          const swayAmt = Math.sin(krakenBoss.t * a.speed + a.phase + f * 4) * a.sway * Math.sin(f * Math.PI) * (isGrabArm ? 0.4 : 1);
+          const x = ax + (tipX - ax) * f * reach + swayAmt;
+          const y = ay + (tipY - ay) * f * reach;
+          if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = pass === 0 ? (isFrozen ? '#1e3a5f' : '#3b1d52') : (isFrozen ? '#7dd3fc' : '#7c3aed');
+        ctx.lineCap = 'round';
+        ctx.lineWidth = (pass === 0 ? 16 : 10) * (0.5 + 0.5 * reach);
+        ctx.stroke();
+      }
+      ctx.fillStyle = isFrozen ? '#bae6fd' : '#c4b5fd';
+      for (let s = 2; s <= segs; s += 2) {
+        const f = s / segs;
+        const swayAmt = Math.sin(krakenBoss.t * a.speed + a.phase + f * 4) * a.sway * Math.sin(f * Math.PI) * (isGrabArm ? 0.4 : 1);
+        const x = ax + (tipX - ax) * f * reach + swayAmt;
+        const y = ay + (tipY - ay) * f * reach;
+        ctx.beginPath(); ctx.arc(x, y, 2.2 * (0.5 + 0.5 * reach), 0, 6.283); ctx.fill();
+      }
+    });
+
+    const bodyG = ctx.createRadialGradient(head.x, head.y, 10, head.x, head.y, 120);
+    bodyG.addColorStop(0, isFrozen ? '#7dd3fc' : '#6d28d9');
+    bodyG.addColorStop(1, isFrozen ? '#1e3a5f' : '#2a1340');
+    ctx.fillStyle = bodyG;
+    ctx.beginPath(); ctx.ellipse(head.x, head.y, 95, 110, 0, 0, 6.283); ctx.fill();
+
+    ctx.fillStyle = '#fde047';
+    ctx.beginPath(); ctx.ellipse(head.x - 10, head.y - 30, 26, 30, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(head.x - 10, head.y - 30, 11, 16, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(head.x - 14, head.y - 38, 3.5, 0, 6.283); ctx.fill();
+
+    const mouthOpen = krakenBoss.phase === 'bite' ? 1 : (krakenBoss.phase === 'grab' ? 0.5 : 0.15);
+    ctx.fillStyle = '#2a0a0a';
+    ctx.beginPath();
+    ctx.ellipse(head.x + 10, head.y + 45, 40, 18 + 22 * mouthOpen, 0, 0, 6.283);
+    ctx.fill();
+    ctx.strokeStyle = '#f1f5f9'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = -3; i <= 3; i++) {
+      ctx.moveTo(head.x + 10 + i * 11, head.y + 45 - (18 + 22 * mouthOpen));
+      ctx.lineTo(head.x + 10 + i * 11, head.y + 45 - (18 + 22 * mouthOpen) + 10);
+    }
+    ctx.stroke();
+
+    if (isFrozen) {
+      ctx.fillStyle = 'rgba(125, 211, 252, 0.35)';
+      ctx.beginPath(); ctx.ellipse(head.x, head.y, 110, 130, 0, 0, 6.283); ctx.fill();
+    }
+  }
+
+  function drawPiranhaSwarm() {
+    const p = krakenBoss.piranha;
+    if (!p.fish.length) return;
+    for (const f of p.fish) {
+      const y = ship.y + 34 + f.depth * 170 + f.oy;
+      const x = p.cx + f.ox;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(f.lean + Math.sin(f.wobble) * 0.18);
+      ctx.scale(f.scale, f.scale);
+
+      const tailSwing = Math.sin(f.wobble * 1.6) * 12;
+      ctx.fillStyle = '#b91c1c';
+      ctx.beginPath();
+      ctx.moveTo(0, 15);
+      ctx.lineTo(-8 + tailSwing * 0.3, 29);
+      ctx.lineTo(0, 21);
+      ctx.lineTo(8 + tailSwing * 0.3, 29);
+      ctx.closePath();
+      ctx.fill();
+
+      const bg = ctx.createLinearGradient(0, -22, 0, 18);
+      bg.addColorStop(0, '#fb923c');
+      bg.addColorStop(0.45, '#ef4444');
+      bg.addColorStop(1, '#7f1d1d');
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.moveTo(0, -22);
+      ctx.bezierCurveTo(11, -16, 13, -2, 9, 8);
+      ctx.bezierCurveTo(7, 14, 3, 17, 0, 18);
+      ctx.bezierCurveTo(-3, 17, -7, 14, -9, 8);
+      ctx.bezierCurveTo(-13, -2, -11, -16, 0, -22);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 226, 170, 0.85)';
+      ctx.beginPath(); ctx.ellipse(0, 6, 5, 9, 0, 0, 6.283); ctx.fill();
+
+      ctx.fillStyle = '#7f1d1d';
+      ctx.beginPath();
+      ctx.moveTo(-2, -4); ctx.lineTo(0, -16); ctx.lineTo(4, -3);
+      ctx.closePath(); ctx.fill();
+
+      ctx.fillStyle = f.biting ? '#fef08a' : '#fff';
+      ctx.beginPath(); ctx.arc(-4, -14, 2.6, 0, 6.283); ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.arc(-4.5, -14, 1.3, 0, 6.283); ctx.fill();
+
+      if (f.biting) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(-3, -20); ctx.lineTo(0, -16); ctx.lineTo(3, -20);
+        ctx.lineTo(2, -17); ctx.lineTo(0, -19); ctx.lineTo(-2, -17);
+        ctx.closePath(); ctx.fill();
+      } else {
+        ctx.strokeStyle = '#7f1d1d'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(-3, -19); ctx.lineTo(3, -19); ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+  }
+
+  function drawStork() {
+    const s = krakenBoss.stork;
+    if (s.phase === 'idle') return;
+    const flap = Math.sin(s.wingPhase * 14) * 0.6;
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    if (s.phase === 'flyOut' && s.targetX < s.startX) ctx.scale(-1, 1);
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.beginPath();
+    ctx.moveTo(-6, -2);
+    ctx.quadraticCurveTo(-42, -12 - flap * 22, -58, 4 - flap * 12);
+    ctx.quadraticCurveTo(-30, 8, -6, 7);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(6, -2);
+    ctx.quadraticCurveTo(42, -12 - flap * 22, 58, 4 - flap * 12);
+    ctx.quadraticCurveTo(30, 8, 6, 7);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath(); ctx.ellipse(-52, 2 - flap * 10, 11, 4.5, 0.3, 0, 6.283); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(52, 2 - flap * 10, 11, 4.5, -0.3, 0, 6.283); ctx.fill();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath(); ctx.ellipse(0, 0, 27, 15, 0, 0, 6.283); ctx.fill();
+
+    ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 9; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(20, -6); ctx.lineTo(35, -26); ctx.stroke();
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath(); ctx.arc(35, -26, 7.5, 0, 6.283); ctx.fill();
+
+    ctx.fillStyle = '#f97316';
+    ctx.beginPath();
+    ctx.moveTo(41, -28); ctx.lineTo(59, -23); ctx.lineTo(41, -20);
+    ctx.closePath(); ctx.fill();
+
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(37, -28, 1.5, 0, 6.283); ctx.fill();
+
+    ctx.strokeStyle = '#f97316'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-9, 9); ctx.lineTo(-15, 25); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-1, 10); ctx.lineTo(-5, 27); ctx.stroke();
+
+    if (s.phase === 'poop' && s.phaseT > 0.15 && s.phaseT < 0.5) {
+      const dt2 = (s.phaseT - 0.15) / 0.35;
+      ctx.fillStyle = '#78502f';
+      ctx.beginPath(); ctx.ellipse(6, 16 + dt2 * 70, 4, 6, 0, 0, 6.283); ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawKrakenCannonballs() {
+    ctx.fillStyle = '#1f2937';
+    for (const b of krakenBoss.cannonballs) {
+      ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = b.cdef.color; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
+  function drawKrakenFloatingTexts() {
+    for (const ft of krakenBoss.floatingTexts) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, ft.life);
+      ctx.font = (ft.big ? 'bold 26px' : 'bold 18px') + ' system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.strokeText(ft.text, ft.x, ft.y);
+      ctx.fillStyle = ft.color;
+      ctx.fillText(ft.text, ft.x, ft.y);
+      ctx.restore();
+    }
+  }
+
+  // ---------- Girdi (mouse + dokunmatik) ----------
+  // pointer.active: dokunuş canvas üzerinde başladıysa true — panel/slider dokunuşlarını
+  // engellemeyiz, sadece gemi/su etkileşimini takip ederiz.
+  const pointer = { x: 0, y: 0, down: false, active: false };
+  function getPos(e) {
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX, y: t.clientY };
+  }
+  function onDown(e) {
+    if (battle.active || krakenBoss.active) return;
+    const p = getPos(e);
+    pointer.x = p.x; pointer.y = p.y; pointer.down = true; pointer.active = true;
+    if (ship.state === 'float' && pointInShip(p.x, p.y)) {
+      ship.held = true;
+      canvas.classList.add('dragging');
+    } else {
+      // suya tıkla → dalga + sıçrama
+      if (p.y > baseLevel - 60) {
+        splashAt(p.x, 9, 3);
+        spawnSplash(p.x, surfaceY(p.x, timeNow), 12);
+      }
+    }
+    e.preventDefault();
+  }
+  function onMove(e) {
+    if (!pointer.active) return;        // panel/slider üzerindeki dokunuşu engellemeyelim
+    const p = getPos(e);
+    pointer.x = p.x; pointer.y = p.y;
+    e.preventDefault();
+  }
+  function onUp() {
+    pointer.active = false;
+    if (ship.held) {
+      // bırakınca sürükleme hızına göre katmanlı, güçlü bir sıçrama
+      const speed = Math.hypot(ship.vx, ship.vy);
+      const power = 24 + Math.min(95, speed * 9.5);
+      const sy = surfaceY(ship.x, timeNow);
+
+      spawnSplash(ship.x, sy, power, 0);                                  // merkez fışkırma
+      spawnSplash(ship.x - ship.w * 0.34, sy - 3, power * 0.6, -1);        // sol kenar
+      spawnSplash(ship.x + ship.w * 0.34, sy - 3, power * 0.6, 1);         // sağ kenar
+      spawnSplash(ship.x, sy - 6, power * 0.35, 0);                        // ince üst sis
+
+      splashAt(ship.x, -Math.min(28, 6 + speed * 1.9), 6);                 // dev dalga tepesi
+      spawnImpactFlash(ship.x, sy, Math.min(1.9, 0.7 + speed * 0.08));     // parlak çarpma ışığı
+      playSplash(power);
+
+      ship.vy = Math.max(ship.vy, 2.5 + Math.min(7, speed * 0.45));
+    }
+    ship.held = false;
+    pointer.down = false;
+    canvas.classList.remove('dragging');
+  }
+  canvas.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  canvas.addEventListener('touchstart', onDown, { passive: false });
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('touchend', onUp);
+
+  // ---------- Kontroller ----------
+  const waveSizeEl = document.getElementById('waveSize');
+  const windEl = document.getElementById('wind');
+  const splashEl = document.getElementById('splash');
+  document.getElementById('reset').addEventListener('click', () => {
+    buildWater(); resetShip();
+    playReset();
+  });
+  document.getElementById('storm').addEventListener('click', () => {
+    for (let i = 0; i < 14; i++) {
+      const x = Math.random() * W;
+      splashAt(x, (Math.random() - 0.3) * 26, 4);
+      spawnSplash(x, surfaceY(x, timeNow), 18);
+    }
+    ship.vy -= 6; ship.vx += (Math.random() - 0.5) * 14;
+    playGust();
+  });
+  document.getElementById('tsunami').addEventListener('click', launchTsunami);
+  document.getElementById('cannon').addEventListener('click', fireCannon);
+  document.getElementById('kraken').addEventListener('click', summonKraken);
+  const rainBtn = document.getElementById('rain');
+  rainBtn.addEventListener('click', () => {
+    raining = !raining;
+    rainBtn.classList.toggle('on', raining);
+    playToggle(raining);
+  });
+  const acidRainBtn = document.getElementById('acidRain');
+  acidRainBtn.addEventListener('click', () => {
+    acidRaining = !acidRaining;
+    acidRainBtn.classList.toggle('on', acidRaining);
+    playToggle(acidRaining);
+  });
+  const dayNightBtn = document.getElementById('dayNight');
+  dayNightBtn.classList.toggle('on', dayNightOn);
+  dayNightBtn.addEventListener('click', () => {
+    dayNightOn = !dayNightOn;
+    dayNightBtn.classList.toggle('on', dayNightOn);
+    playToggle(dayNightOn);
+  });
+  const muteBtn = document.getElementById('muteToggle');
+  muteBtn.addEventListener('click', () => {
+    ensureAudio();
+    const muted = toggleMute();
+    muteBtn.classList.toggle('muted', muted);
+  });
+
+  // ---------- Ana döngü ----------
+  let timeNow = 0, last = performance.now(), fpsAcc = 0, fpsCount = 0;
+  const fpsEl = document.getElementById('fps');
+
+  function loop(now) {
+    const dt = Math.min(40, now - last) / 16.67;
+    last = now;
+    timeNow += dt * 0.016;
+
+    if (battle.active) {
+      updateBattle(dt);
+      drawBattleScene();
+    } else {
+      // güncelle (sabit alt-adımlar ile kararlılık)
+      if (dayNightOn) cycleT = (cycleT + dt * 0.016 / CYCLE_DURATION) % 1;
+      updateTsunami(dt);
+      updateWater();
+      updateShip(dt);
+      updateBalls(dt);
+      updateKraken(dt);
+      updateKrakenBoss(dt);
+      updatePiranhaSwarm(dt);
+      updateStorkEvent(dt);
+      updateDebris(dt);
+      updateBubbles(dt);
+      updateRain();
+      updateAcidRain();
+      updateParticles();
+      updateFlashes(dt);
+      updateLightning(dt);
+      updateGoo(dt);
+      updateAudio();
+
+      // çiz
+      const sun = drawSky(timeNow);
+      drawWater(timeNow, sun);
+      drawGoo(timeNow);
+      drawFlashes(timeNow);
+      drawBubbles();
+      drawKraken();
+      drawKrakenBossEntity();
+      drawPiranhaSwarm();
+      drawShip();
+      drawDebris();
+      drawKrakenCannonballs();
+      drawBalls();
+      drawParticles();
+      drawRain();
+      drawAcidRain();
+      drawLightning();
+      drawStork();
+      drawKrakenFloatingTexts();
+    }
+
+    // fps
+    fpsAcc += now - (loop._p || now); loop._p = now; fpsCount++;
+    if (fpsCount >= 20) {
+      fpsEl.textContent = Math.round(1000 / (fpsAcc / fpsCount)) + ' FPS · ' + particles.length + ' damla';
+      fpsAcc = 0; fpsCount = 0;
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- HUD daraltma (mobil) ----------
+  const hudEl = document.getElementById('hud');
+  const hudToggle = document.getElementById('hudToggle');
+  hudToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const collapsed = hudEl.classList.toggle('collapsed');
+    hudToggle.textContent = collapsed ? '▸' : '▾';
+  });
+  const hudClose = document.getElementById('hudClose');
+  hudClose.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hudEl.classList.add('hud-hidden');
+  });
+  if (window.matchMedia('(max-width: 640px), (max-height: 480px)').matches) {
+    hudEl.classList.add('collapsed');
+    hudToggle.textContent = '▸';
+  }
+
+  // ---------- Başlangıç menüsü ----------
+  const startMenu = document.getElementById('startMenu');
+  const mobileWarning = document.getElementById('mobileWarning');
+  function closeStartMenu() {
+    startMenu.classList.add('hidden');
+  }
+  document.getElementById('choosePhone').addEventListener('click', () => {
+    ensureAudio();
+    closeStartMenu();
+    mobileWarning.classList.add('show');
+    setTimeout(() => mobileWarning.classList.remove('show'), 3000);
+  });
+
+  // ---------- Başlat ----------
+  let resizeTimer = null;
+  function deferredResize() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resize, 80);
+  }
+  window.addEventListener('resize', deferredResize);
+  window.addEventListener('orientationchange', deferredResize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', deferredResize);
+  resize();
+  buildStars();
+  resetShip();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
