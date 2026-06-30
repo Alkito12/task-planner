@@ -34,11 +34,19 @@
     display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .hud p { font-size: 0.72rem; color: #93a9c8; line-height: 1.45; margin-top: 4px; }
   .hud .key { color: #7dd3fc; font-weight: 600; }
+  .hud-btns { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
   .hud-toggle {
     display: none; background: none; border: none; color: #93a9c8; font-size: 0.95rem;
     line-height: 1; padding: 2px 4px; cursor: pointer; -webkit-tap-highlight-color: transparent;
   }
+  .hud-close {
+    background: none; border: none; color: #93a9c8; font-size: 0.85rem;
+    line-height: 1; padding: 2px 4px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: color .12s;
+  }
+  .hud-close:hover { color: #f87171; }
   .hud.collapsed p { display: none; }
+  .hud.hud-hidden { display: none; }
 
   .panel {
     position: fixed; bottom: max(12px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10;
@@ -346,7 +354,7 @@
 </div>
 
 <div class="hud" id="hud">
-  <h1>⚓ Su Fiziği · Gemi <button class="hud-toggle" id="hudToggle">▾</button></h1>
+  <h1>⚓ Su Fiziği · Gemi <span class="hud-btns"><button class="hud-toggle" id="hudToggle">▾</button><button class="hud-close" id="hudClose" title="Kapat" aria-label="Kapat">✕</button></span></h1>
   <p>Gemiye <span class="key">basılı tut</span> ve suda <span class="key">sürükle</span>.
   Bıraktığında su dalgalanır ve <span class="key">fışkırır</span>. Suya tıklayarak da dalga oluştur.
   <br>🦑 <span class="key">Kraken</span> gemiyi kapıp dibe çeker ve parçalar. 🧪 <span class="key">Asit Yağmuru</span> gemiyi eritir —
@@ -1375,7 +1383,7 @@
   }
 
   // ---------- Gece/Gündüz döngüsü ----------
-  let dayNightOn = false;
+  let dayNightOn = true;
   let cycleT = 0;                 // 0..1, bir tam günü temsil eder
   const CYCLE_DURATION = 50;      // saniye
   function lerpColor(c1, c2, f) {
@@ -2642,6 +2650,7 @@
     playToggle(acidRaining);
   });
   const dayNightBtn = document.getElementById('dayNight');
+  dayNightBtn.classList.toggle('on', dayNightOn);
   dayNightBtn.addEventListener('click', () => {
     dayNightOn = !dayNightOn;
     dayNightBtn.classList.toggle('on', dayNightOn);
@@ -2721,6 +2730,11 @@
     e.stopPropagation();
     const collapsed = hudEl.classList.toggle('collapsed');
     hudToggle.textContent = collapsed ? '▸' : '▾';
+  });
+  const hudClose = document.getElementById('hudClose');
+  hudClose.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hudEl.classList.add('hud-hidden');
   });
   if (window.matchMedia('(max-width: 640px), (max-height: 480px)').matches) {
     hudEl.classList.add('collapsed');
