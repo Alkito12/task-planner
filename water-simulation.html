@@ -587,8 +587,19 @@
   function playKraken() {
     if (!audioCtx) return;
     const t = audioCtx.currentTime;
+
+    // ağırlık veren alt-bas gövde
+    const sub = audioCtx.createOscillator(); sub.type = 'sine'; sub.frequency.value = 42;
+    const subG = audioCtx.createGain();
+    subG.gain.setValueAtTime(0.0001, t);
+    subG.gain.linearRampToValueAtTime(0.45, t + 0.5);
+    subG.gain.exponentialRampToValueAtTime(0.001, t + 2.8);
+    sub.connect(subG); subG.connect(sfxGain);
+
+    // kükreme gövdesi
     const o1 = audioCtx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 68;
     const o2 = audioCtx.createOscillator(); o2.type = 'sine'; o2.frequency.value = 71;
+    const o3 = audioCtx.createOscillator(); o3.type = 'triangle'; o3.frequency.value = 136;
     const lfo = audioCtx.createOscillator(); lfo.frequency.value = 4.2;
     const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 6;
     lfo.connect(lfoGain); lfoGain.connect(o1.frequency); lfoGain.connect(o2.frequency);
@@ -598,9 +609,22 @@
     g.gain.linearRampToValueAtTime(0.5, t + 0.6);
     g.gain.linearRampToValueAtTime(0.35, t + 1.6);
     g.gain.exponentialRampToValueAtTime(0.001, t + 2.6);
-    o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(sfxGain);
-    o1.start(t); o2.start(t); lfo.start(t);
-    o1.stop(t + 2.7); o2.stop(t + 2.7); lfo.stop(t + 2.7);
+    const o3g = audioCtx.createGain(); o3g.gain.value = 0.12;
+    o1.connect(lp); o2.connect(lp); o3.connect(o3g); o3g.connect(lp); lp.connect(g); g.connect(sfxGain);
+
+    // saldırı anındaki tiz çığlık vurması
+    const hiss = audioCtx.createOscillator(); hiss.type = 'sawtooth';
+    hiss.frequency.setValueAtTime(900, t);
+    hiss.frequency.exponentialRampToValueAtTime(260, t + 0.35);
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 2.2;
+    const hissG = audioCtx.createGain();
+    hissG.gain.setValueAtTime(0.0001, t);
+    hissG.gain.linearRampToValueAtTime(0.22, t + 0.06);
+    hissG.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    hiss.connect(bp); bp.connect(hissG); hissG.connect(sfxGain);
+
+    sub.start(t); o1.start(t); o2.start(t); o3.start(t); lfo.start(t); hiss.start(t);
+    sub.stop(t + 2.9); o1.stop(t + 2.9); o2.stop(t + 2.9); o3.stop(t + 2.9); lfo.stop(t + 2.9); hiss.stop(t + 0.5);
   }
   function playWreck() {
     if (!audioCtx) return;
@@ -2285,6 +2309,7 @@
     krakenHud.classList.remove('hidden');
     krakenResult.classList.add('hidden');
     updateKrakenHpUI();
+    playKraken();
   }
 
   function endKrakenBattle(result) {
