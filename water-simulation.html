@@ -637,6 +637,29 @@
     noise.start(t); noise.stop(t + 0.45);
     playSplash(34);
   }
+  function playPiranhaBite() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    for (let i = 0; i < 5; i++) {
+      const st = t + i * 0.045 + Math.random() * 0.015;
+      const snap = audioCtx.createOscillator(); snap.type = 'square';
+      snap.frequency.setValueAtTime(620 + Math.random() * 420, st);
+      snap.frequency.exponentialRampToValueAtTime(90, st + 0.06);
+      const sg = audioCtx.createGain();
+      sg.gain.setValueAtTime(0.0001, st);
+      sg.gain.linearRampToValueAtTime(0.32, st + 0.006);
+      sg.gain.exponentialRampToValueAtTime(0.001, st + 0.09);
+      snap.connect(sg); sg.connect(sfxGain);
+      snap.start(st); snap.stop(st + 0.1);
+    }
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 1.4;
+    const ng = audioCtx.createGain();
+    ng.gain.setValueAtTime(0.4, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    noise.connect(bp); bp.connect(ng); ng.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.32);
+    playSplash(18);
+  }
   function playMeltFinish() {
     if (!audioCtx) return;
     const t = audioCtx.currentTime;
@@ -2240,7 +2263,11 @@
     cooldown: 0,
     cannonballs: [],
     floatingTexts: [],
+    piranha: { timer: 4, phase: 'idle', phaseT: 0, fish: [], cx: 0 },
   };
+  const PIRANHA_COUNT = 12;
+  const PIRANHA_DMG = 400;
+  const PIRANHA_INTERVAL = 4;
 
   const cannonTabEl = document.getElementById('cannonTab');
   const krakenHud = document.getElementById('krakenHud');
@@ -2290,6 +2317,10 @@
     krakenBoss.dots.length = 0;
     krakenBoss.result = null;
     krakenBoss.frozen = false;
+    krakenBoss.piranha.timer = PIRANHA_INTERVAL;
+    krakenBoss.piranha.phase = 'idle';
+    krakenBoss.piranha.phaseT = 0;
+    krakenBoss.piranha.fish.length = 0;
     krakenBoss.arms = [];
     const n = 20;
     for (let i = 0; i < n; i++) {
@@ -2318,6 +2349,9 @@
     krakenBoss.floatingTexts.length = 0;
     krakenBoss.dots.length = 0;
     krakenBoss.cannonballs.length = 0;
+    krakenBoss.piranha.fish.length = 0;
+    krakenBoss.piranha.phase = 'idle';
+    krakenBoss.piranha.phaseT = 0;
     if (result === 'win') { playReset(); } else { playWreck(); }
     krakenResultTitle.textContent = result === 'win' ? '🏆 Krakeni Yendin!' : '💀 Gemin Battı!';
     krakenResult.classList.remove('hidden');
@@ -2330,6 +2364,9 @@
     krakenBoss.floatingTexts.length = 0;
     krakenBoss.dots.length = 0;
     krakenBoss.cannonballs.length = 0;
+    krakenBoss.piranha.fish.length = 0;
+    krakenBoss.piranha.phase = 'idle';
+    krakenBoss.piranha.phaseT = 0;
     document.body.classList.remove('kraken-mode');
     krakenHud.classList.add('hidden');
     krakenResult.classList.add('hidden');
@@ -2493,6 +2530,72 @@
     }
   }
 
+  function startPiranhaWave() {
+    const p = krakenBoss.piranha;
+    p.timer = PIRANHA_INTERVAL;
+    p.phase = 'rising';
+    p.phaseT = 0;
+    p.cx = ship.x;
+    p.fish.length = 0;
+    for (let i = 0; i < PIRANHA_COUNT; i++) {
+      const ang = Math.random() * 6.283;
+      const rad = 14 + Math.random() * 34;
+      p.fish.push({
+        ox: Math.cos(ang) * rad,
+        oy: Math.sin(ang) * rad * 0.5,
+        depth: 1,
+        wobble: Math.random() * 6.283,
+        wobSpeed: 3 + Math.random() * 2.5,
+        scale: 0.82 + Math.random() * 0.36,
+        lean: (Math.random() - 0.5) * 0.5,
+        biting: false,
+      });
+    }
+  }
+
+  function updatePiranhaSwarm(dt) {
+    if (!krakenBoss.active || krakenBoss.frozen || krakenBoss.result) return;
+    if (krakenBoss.freezeT > 0) return;
+    const p = krakenBoss.piranha;
+    if (p.phase === 'idle') {
+      p.timer -= dt * 0.016;
+      if (p.timer <= 0 && ship.state === 'float') startPiranhaWave();
+      return;
+    }
+    p.cx = ship.x;
+    p.phaseT += dt * 0.016;
+    const wobMul = p.phase === 'biting' ? 2.4 : 1;
+    for (const f of p.fish) f.wobble += dt * f.wobSpeed * wobMul;
+    if (p.phase === 'rising') {
+      const t = Math.min(1, p.phaseT / 0.9);
+      for (const f of p.fish) f.depth = 1 - t;
+      if (Math.random() < 0.35) spawnBubble(p.cx + (Math.random() - 0.5) * 70, baseLevel - 6);
+      if (t >= 1) {
+        p.phase = 'biting'; p.phaseT = 0;
+        for (const f of p.fish) { f.depth = 0; f.biting = true; }
+        krakenBoss.shipHp -= PIRANHA_DMG;
+        spawnShipBiteDamage();
+        spawnFloatText(p.cx, ship.y - 30, '-' + PIRANHA_DMG, '#f97316', true);
+        updateKrakenHpUI();
+        playPiranhaBite();
+        splashAt(p.cx, 14, 3);
+        if (krakenBoss.shipHp <= 0) endKrakenBattle('lose');
+      }
+    } else if (p.phase === 'biting') {
+      if (p.phaseT >= 0.35) {
+        p.phase = 'leaving'; p.phaseT = 0;
+        for (const f of p.fish) f.biting = false;
+      }
+    } else if (p.phase === 'leaving') {
+      const t = Math.min(1, p.phaseT / 0.9);
+      for (const f of p.fish) f.depth = t;
+      if (t >= 1) {
+        p.phase = 'idle'; p.phaseT = 0;
+        p.fish.length = 0;
+      }
+    }
+  }
+
   function drawKrakenBossEntity() {
     if (!krakenBoss.active) return;
     const head = krakenHeadPos();
@@ -2569,6 +2672,68 @@
     if (isFrozen) {
       ctx.fillStyle = 'rgba(125, 211, 252, 0.35)';
       ctx.beginPath(); ctx.ellipse(head.x, head.y, 110, 130, 0, 0, 6.283); ctx.fill();
+    }
+  }
+
+  function drawPiranhaSwarm() {
+    const p = krakenBoss.piranha;
+    if (!p.fish.length) return;
+    for (const f of p.fish) {
+      const y = ship.y + 34 + f.depth * 170 + f.oy;
+      const x = p.cx + f.ox;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(f.lean + Math.sin(f.wobble) * 0.18);
+      ctx.scale(f.scale, f.scale);
+
+      const tailSwing = Math.sin(f.wobble * 1.6) * 12;
+      ctx.fillStyle = '#b91c1c';
+      ctx.beginPath();
+      ctx.moveTo(0, 15);
+      ctx.lineTo(-8 + tailSwing * 0.3, 29);
+      ctx.lineTo(0, 21);
+      ctx.lineTo(8 + tailSwing * 0.3, 29);
+      ctx.closePath();
+      ctx.fill();
+
+      const bg = ctx.createLinearGradient(0, -22, 0, 18);
+      bg.addColorStop(0, '#fb923c');
+      bg.addColorStop(0.45, '#ef4444');
+      bg.addColorStop(1, '#7f1d1d');
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.moveTo(0, -22);
+      ctx.bezierCurveTo(11, -16, 13, -2, 9, 8);
+      ctx.bezierCurveTo(7, 14, 3, 17, 0, 18);
+      ctx.bezierCurveTo(-3, 17, -7, 14, -9, 8);
+      ctx.bezierCurveTo(-13, -2, -11, -16, 0, -22);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 226, 170, 0.85)';
+      ctx.beginPath(); ctx.ellipse(0, 6, 5, 9, 0, 0, 6.283); ctx.fill();
+
+      ctx.fillStyle = '#7f1d1d';
+      ctx.beginPath();
+      ctx.moveTo(-2, -4); ctx.lineTo(0, -16); ctx.lineTo(4, -3);
+      ctx.closePath(); ctx.fill();
+
+      ctx.fillStyle = f.biting ? '#fef08a' : '#fff';
+      ctx.beginPath(); ctx.arc(-4, -14, 2.6, 0, 6.283); ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.arc(-4.5, -14, 1.3, 0, 6.283); ctx.fill();
+
+      if (f.biting) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(-3, -20); ctx.lineTo(0, -16); ctx.lineTo(3, -20);
+        ctx.lineTo(2, -17); ctx.lineTo(0, -19); ctx.lineTo(-2, -17);
+        ctx.closePath(); ctx.fill();
+      } else {
+        ctx.strokeStyle = '#7f1d1d'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(-3, -19); ctx.lineTo(3, -19); ctx.stroke();
+      }
+
+      ctx.restore();
     }
   }
 
@@ -2722,6 +2887,7 @@
       updateBalls(dt);
       updateKraken(dt);
       updateKrakenBoss(dt);
+      updatePiranhaSwarm(dt);
       updateDebris(dt);
       updateBubbles(dt);
       updateRain();
@@ -2740,6 +2906,7 @@
       drawBubbles();
       drawKraken();
       drawKrakenBossEntity();
+      drawPiranhaSwarm();
       drawShip();
       drawDebris();
       drawKrakenCannonballs();
