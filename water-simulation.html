@@ -656,6 +656,39 @@
     noise.start(t); noise.stop(t + 0.32);
     playSplash(18);
   }
+  function playStorkCall() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const st = t + i * 0.15;
+      const o = audioCtx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(1150 + Math.random() * 220, st);
+      o.frequency.exponentialRampToValueAtTime(640, st + 0.11);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.linearRampToValueAtTime(0.2, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.14);
+      o.connect(g); g.connect(sfxGain);
+      o.start(st); o.stop(st + 0.16);
+    }
+  }
+  function playStorkPoop() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = noiseSource();
+    const bp = audioCtx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 900;
+    const ng = audioCtx.createGain();
+    ng.gain.setValueAtTime(0.5, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+    noise.connect(bp); bp.connect(ng); ng.connect(sfxGain);
+    noise.start(t); noise.stop(t + 0.28);
+    const osc = audioCtx.createOscillator(); osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(55, t + 0.2);
+    const og = audioCtx.createGain();
+    og.gain.setValueAtTime(0.4, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.connect(og); og.connect(sfxGain);
+    osc.start(t); osc.stop(t + 0.25);
+  }
   function playMeltFinish() {
     if (!audioCtx) return;
     const t = audioCtx.currentTime;
@@ -2260,10 +2293,13 @@
     cannonballs: [],
     floatingTexts: [],
     piranha: { timer: 4, phase: 'idle', phaseT: 0, fish: [], cx: 0 },
+    stork: { armed: false, fired: false, phase: 'idle', phaseT: 0, triggerT: 0, x: 0, y: 0, wingPhase: 0 },
   };
   const PIRANHA_COUNT = 12;
   const PIRANHA_DMG = 400;
   const PIRANHA_INTERVAL = 4;
+  const STORK_CHANCE = 0.35;
+  const STORK_DMG = 450;
 
   const cannonTabEl = document.getElementById('cannonTab');
   const krakenHud = document.getElementById('krakenHud');
@@ -2317,6 +2353,11 @@
     krakenBoss.piranha.phase = 'idle';
     krakenBoss.piranha.phaseT = 0;
     krakenBoss.piranha.fish.length = 0;
+    krakenBoss.stork.armed = Math.random() < STORK_CHANCE;
+    krakenBoss.stork.fired = false;
+    krakenBoss.stork.phase = 'idle';
+    krakenBoss.stork.phaseT = 0;
+    krakenBoss.stork.triggerT = 6 + Math.random() * 16;
     krakenBoss.arms = [];
     const n = 20;
     for (let i = 0; i < n; i++) {
@@ -2348,6 +2389,8 @@
     krakenBoss.piranha.fish.length = 0;
     krakenBoss.piranha.phase = 'idle';
     krakenBoss.piranha.phaseT = 0;
+    krakenBoss.stork.phase = 'idle';
+    krakenBoss.stork.phaseT = 0;
     if (result === 'win') { playReset(); } else { playWreck(); }
     krakenResultTitle.textContent = result === 'win' ? '🏆 Krakeni Yendin!' : '💀 Gemin Battı!';
     krakenResult.classList.remove('hidden');
@@ -2363,6 +2406,8 @@
     krakenBoss.piranha.fish.length = 0;
     krakenBoss.piranha.phase = 'idle';
     krakenBoss.piranha.phaseT = 0;
+    krakenBoss.stork.phase = 'idle';
+    krakenBoss.stork.phaseT = 0;
     document.body.classList.remove('kraken-mode');
     krakenHud.classList.add('hidden');
     krakenResult.classList.add('hidden');
@@ -2592,6 +2637,50 @@
     }
   }
 
+  function updateStorkEvent(dt) {
+    if (!krakenBoss.active || krakenBoss.frozen || krakenBoss.result) return;
+    const s = krakenBoss.stork;
+    if (s.phase === 'idle') {
+      if (krakenBoss.freezeT > 0) return;
+      if (!s.armed || s.fired) return;
+      if (krakenBoss.t >= s.triggerT) {
+        s.phase = 'flyIn'; s.phaseT = 0;
+        s.startX = -80; s.startY = 80 + Math.random() * 60;
+        const head = krakenHeadPos();
+        s.targetX = head.x; s.targetY = head.y - 150;
+        s.wingPhase = 0;
+        playStorkCall();
+      }
+      return;
+    }
+    s.phaseT += dt * 0.016;
+    s.wingPhase += dt * 0.45;
+    const head = krakenHeadPos();
+    if (s.phase === 'flyIn') {
+      const t = Math.min(1, s.phaseT / 1.6);
+      s.x = s.startX + (s.targetX - s.startX) * t;
+      s.y = s.startY + (s.targetY - s.startY) * t - Math.sin(t * Math.PI) * 50;
+      if (t >= 1) { s.phase = 'poop'; s.phaseT = 0; }
+    } else if (s.phase === 'poop') {
+      s.x = head.x; s.y = head.y - 150;
+      if (s.phaseT >= 0.5) {
+        applyKrakenDamage(STORK_DMG, '#a3e635', true);
+        playStorkPoop();
+        spawnImpactFlash(head.x, head.y - 60, 0.9, '#a3e635');
+        s.fired = true;
+        s.phase = 'flyOut'; s.phaseT = 0;
+        s.startX = s.x; s.startY = s.y;
+        s.targetX = Math.random() < 0.5 ? -120 : W + 120;
+        s.targetY = s.y - 110;
+      }
+    } else if (s.phase === 'flyOut') {
+      const t = Math.min(1, s.phaseT / 1.4);
+      s.x = s.startX + (s.targetX - s.startX) * t;
+      s.y = s.startY + (s.targetY - s.startY) * t;
+      if (t >= 1) { s.phase = 'idle'; s.phaseT = 0; }
+    }
+  }
+
   function drawKrakenBossEntity() {
     if (!krakenBoss.active) return;
     const head = krakenHeadPos();
@@ -2731,6 +2820,58 @@
 
       ctx.restore();
     }
+  }
+
+  function drawStork() {
+    const s = krakenBoss.stork;
+    if (s.phase === 'idle') return;
+    const flap = Math.sin(s.wingPhase * 14) * 0.6;
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    if (s.phase === 'flyOut' && s.targetX < s.startX) ctx.scale(-1, 1);
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.beginPath();
+    ctx.moveTo(-6, -2);
+    ctx.quadraticCurveTo(-42, -12 - flap * 22, -58, 4 - flap * 12);
+    ctx.quadraticCurveTo(-30, 8, -6, 7);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(6, -2);
+    ctx.quadraticCurveTo(42, -12 - flap * 22, 58, 4 - flap * 12);
+    ctx.quadraticCurveTo(30, 8, 6, 7);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath(); ctx.ellipse(-52, 2 - flap * 10, 11, 4.5, 0.3, 0, 6.283); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(52, 2 - flap * 10, 11, 4.5, -0.3, 0, 6.283); ctx.fill();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath(); ctx.ellipse(0, 0, 27, 15, 0, 0, 6.283); ctx.fill();
+
+    ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 9; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(20, -6); ctx.lineTo(35, -26); ctx.stroke();
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath(); ctx.arc(35, -26, 7.5, 0, 6.283); ctx.fill();
+
+    ctx.fillStyle = '#f97316';
+    ctx.beginPath();
+    ctx.moveTo(41, -28); ctx.lineTo(59, -23); ctx.lineTo(41, -20);
+    ctx.closePath(); ctx.fill();
+
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(37, -28, 1.5, 0, 6.283); ctx.fill();
+
+    ctx.strokeStyle = '#f97316'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-9, 9); ctx.lineTo(-15, 25); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-1, 10); ctx.lineTo(-5, 27); ctx.stroke();
+
+    if (s.phase === 'poop' && s.phaseT > 0.15 && s.phaseT < 0.5) {
+      const dt2 = (s.phaseT - 0.15) / 0.35;
+      ctx.fillStyle = '#78502f';
+      ctx.beginPath(); ctx.ellipse(6, 16 + dt2 * 70, 4, 6, 0, 0, 6.283); ctx.fill();
+    }
+
+    ctx.restore();
   }
 
   function drawKrakenCannonballs() {
@@ -2884,6 +3025,7 @@
       updateKraken(dt);
       updateKrakenBoss(dt);
       updatePiranhaSwarm(dt);
+      updateStorkEvent(dt);
       updateDebris(dt);
       updateBubbles(dt);
       updateRain();
@@ -2911,6 +3053,7 @@
       drawRain();
       drawAcidRain();
       drawLightning();
+      drawStork();
       drawKrakenFloatingTexts();
     }
 
