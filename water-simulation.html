@@ -2298,7 +2298,7 @@
   const PIRANHA_COUNT = 12;
   const PIRANHA_DMG = 400;
   const PIRANHA_INTERVAL = 4;
-  const STORK_CHANCE = 0.35;
+  const STORK_CHANCE = 0.7;
   const STORK_DMG = 450;
 
   const cannonTabEl = document.getElementById('cannonTab');
@@ -2357,7 +2357,7 @@
     krakenBoss.stork.fired = false;
     krakenBoss.stork.phase = 'idle';
     krakenBoss.stork.phaseT = 0;
-    krakenBoss.stork.triggerT = 6 + Math.random() * 16;
+    krakenBoss.stork.triggerT = 3 + Math.random() * 8;
     krakenBoss.arms = [];
     const n = 20;
     for (let i = 0; i < n; i++) {
