@@ -206,7 +206,8 @@
 
   body.battle-mode .kraken-btn, body.kraken-mode .war-btn, body.kraken-mode .kraken-btn { display: none; }
   body.kraken-mode .hud, body.kraken-mode .panel { display: none; }
-  body.kraken-mode .battle-controls { display: flex; }
+  body.kraken-mode .battle-controls { display: flex; pointer-events: none; }
+  body.kraken-mode .battle-controls .bc-move { pointer-events: auto; }
   body.kraken-mode #bcFire { display: none; }
 
   .cannon-tab {
